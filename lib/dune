@@ -1,0 +1,4 @@
+(library
+ (name lua)
+ (modules Ast Lexer Parser Interpreter)
+ (libraries angstrom base))
