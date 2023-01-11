@@ -23,6 +23,29 @@ let show_vars env = IdentMap.iter show_var env
 
 (* Interpreter *)
 
+let rec execute_expr expression env =
+    match expression with
+    | Literal lit -> lit
+    | Identifier id -> (
+        try (IdentMap.find id env) with
+        | Not_found -> match id with
+            | Name name -> prerr_string ("Identifier `" ^ name ^ "` not declared.\n"); Numeric (-1)
+    )
+    | Binary (left, op, right) -> (
+        let litl = execute_expr left env in
+        let litr = execute_expr right env in
+        match litl with
+        | Numeric numl -> match litr with
+        | Numeric numr -> (
+                match op with
+                | "+" -> Numeric (numl + numr)
+                | "-" -> Numeric (numl - numr)
+                | "*" -> Numeric (numl * numr)
+                | "/" -> Numeric (numl / numr)
+                | _ -> prerr_string ("Operator `" ^ op ^ "` undefined.\n"); Numeric (-1)
+            )
+    )
+
 let rec print args env =
     match args with
     | [] -> print_newline ()
@@ -32,45 +55,55 @@ let rec print args env =
                 | Numeric num -> print_int num; if tail != [] then print_char ' ' ; print tail env
             ) with
             | Not_found -> match id with
-                | Name name -> prerr_string ("Identifier `" ^ name ^ "` not declared.\n")
+                |Name name -> prerr_string ("Identifier `" ^ name ^ "` not declared.\n")
         )
-        | Literal lit ->
+        | Literal lit -> (
             match lit with
             | Numeric num -> print_int num; if tail != [] then print_char ' ' ; print tail env
+        )
+        | Binary _ -> (
+            match execute_expr head env with
+            | Numeric num -> print_int num; if tail != [] then print_char ' ' ; print tail env
+        )
 
-let execute statement env =
+let execute_stm statement env =
     match statement with
     | Call (Name func, args) -> (
         match func with
             | "print" -> print args env; env
             | _ -> prerr_string ("Function `" ^ func ^ "` not implemented.\n") ; env
     )
-    | Assignment (id, expr) ->
-        match expr with
-        | Literal lit -> IdentMap.add id lit env
-        | _ -> prerr_endline "Wrong assignment."; env
+    | Assignment (id, expr) -> IdentMap.add id (execute_expr expr env) env
 
 let rec execute_ast chunk env =
     match chunk with
     | Chunk [] -> env
-    | Chunk (hd :: tl) -> execute hd env |> execute_ast (Chunk tl)
+    | Chunk (head :: tail) -> execute_stm head env |> execute_ast (Chunk tail)
 
 (* Tests *)
 
 let vars = IdentMap.empty
 let var = Name "var"
-let twelwe = Numeric 12
+let zero = Numeric 0
 
 let ast = Chunk (
-    Assignment (var, Literal(Numeric 1)) ::
-    Assignment (Name "arg1", Literal(Numeric 2)) ::
-    Assignment (Name "arg2", Literal(Numeric 3)) ::
+    Assignment (var, Literal(zero)) ::
+    Assignment (var, Literal(Numeric 10)) ::
+    Assignment (var, Binary(Literal(Numeric 3), "-", Literal(Numeric 2))) ::
+
+    Assignment (Name "arg2", Literal(zero)) ::
+    Assignment (Name "arg2", Literal(Numeric 1)) ::
+    Assignment (Name "arg2", Binary(Literal(Numeric 2), "+", Literal(Numeric 3))) ::
+
     Call (
         Name "print",
-        Identifier (Name "arg2") :: Literal(Numeric 19) :: []) ::
+        Identifier (Name "arg2") :: Literal(Numeric 19) :: Literal (zero) :: []) ::
     Call (
         Name "print",
-        Literal (twelwe) :: Identifier (var) :: []) ::
+        Identifier (var) ::
+        Binary(
+            Binary(Identifier(Name "var"), "*", Literal(Numeric 5)),
+            "*", Literal(Numeric 3)) :: []) ::
     Call (
         Name "print",
         []) ::

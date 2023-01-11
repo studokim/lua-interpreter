@@ -4,9 +4,12 @@ type identifier =
 type literal =
 | Numeric of int
 
+type operator = string
+
 type expression =
 | Identifier of identifier
 | Literal of literal
+| Binary of expression * operator * expression
 
 type statement =
 | Assignment of identifier * expression
