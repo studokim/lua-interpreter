@@ -36,35 +36,21 @@ let rec execute_expr expression env =
         let litr = execute_expr right env in
         match litl with
         | Numeric numl -> match litr with
-        | Numeric numr -> (
-                match op with
-                | "+" -> Numeric (numl + numr)
-                | "-" -> Numeric (numl - numr)
-                | "*" -> Numeric (numl * numr)
-                | "/" -> Numeric (numl / numr)
-                | _ -> prerr_string ("Operator `" ^ op ^ "` undefined.\n"); Numeric (-1)
-            )
+            | Numeric numr -> (
+                    match op with
+                    | "+" -> Numeric (numl + numr)
+                    | "-" -> Numeric (numl - numr)
+                    | "*" -> Numeric (numl * numr)
+                    | "/" -> Numeric (numl / numr)
+                    | _ -> prerr_string ("Operator `" ^ op ^ "` undefined.\n"); Numeric (-1)
+                )
     )
 
 let rec print args env =
     match args with
     | [] -> print_newline ()
-    | head :: tail -> match head with
-        | Identifier id -> (
-            try (match IdentMap.find id env with
-                | Numeric num -> print_int num; if tail != [] then print_char ' ' ; print tail env
-            ) with
-            | Not_found -> match id with
-                |Name name -> prerr_string ("Identifier `" ^ name ^ "` not declared.\n")
-        )
-        | Literal lit -> (
-            match lit with
-            | Numeric num -> print_int num; if tail != [] then print_char ' ' ; print tail env
-        )
-        | Binary _ -> (
-            match execute_expr head env with
-            | Numeric num -> print_int num; if tail != [] then print_char ' ' ; print tail env
-        )
+    | head :: tail -> match execute_expr head env with
+        | Numeric num -> print_int num; if tail != [] then print_char ' ' ; print tail env
 
 let execute_stm statement env =
     match statement with
@@ -91,7 +77,7 @@ let ast = Chunk (
     Assignment (var, Literal(Numeric 10)) ::
     Assignment (var, Binary(Literal(Numeric 3), "-", Literal(Numeric 2))) ::
 
-    Assignment (Name "arg2", Literal(zero)) ::
+    Assignment (Name "arg1", Literal(zero)) ::
     Assignment (Name "arg2", Literal(Numeric 1)) ::
     Assignment (Name "arg2", Binary(Literal(Numeric 2), "+", Literal(Numeric 3))) ::
 

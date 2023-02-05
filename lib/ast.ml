@@ -1,3 +1,4 @@
+(* Functions are first-order *)
 type identifier =
 | Name of string
 
@@ -19,4 +20,4 @@ type chunk =
 | Chunk of statement list
 
 let hello =
-        print_endline "Hello world"
+        print_endline "Hello, world!"
