@@ -36,12 +36,12 @@ let stream_of_string str =
   | [] -> raise End_of_file
   | head :: tail -> { index = 0; before = []; next = head; after = tail }
 
+(*** by Character ***)
+
 exception Syntax_error of string
 
 let syntax_error stm msg =
-  raise (Util.Syntax_error (msg ^ " on character " ^ string_of_int stm.index))
-
-(*** by Character ***)
+  raise (Syntax_error (msg ^ " on character " ^ string_of_int stm.index))
 
 let is_digit c =
   let code = Char.code c in
@@ -64,9 +64,10 @@ let rec skip_blank_chars stm =
 (* all lang keywords/symbols *)
 type token =
   | Identifier of string
+  | Print
   | Literal of int
   | Assign
-  | Print
+  | Equals
   | LeftParen
   | RightParen
   | AddOp
@@ -81,23 +82,31 @@ let scan scanner =
   let stm = skip_blank_chars scanner.stream in
   let c = stm.next in
   let rec scan_identifier stm acc =
-    let stm = read_char stm in
-    let next_c = stm.next in
-    if is_alpha next_c || is_digit next_c || next_c = '_' then
-      scan_identifier stm (acc ^ Char.escaped next_c)
+    let stm_next = read_char stm in
+    let c_next = stm_next.next in
+    if is_alpha c_next || is_digit c_next || c_next = '_' then
+      scan_identifier stm_next (acc ^ Char.escaped c_next)
     else if acc = "print" then { stream = read_char stm; token = Some Print }
     else { stream = read_char stm; token = Some (Identifier acc) }
   in
   let rec scan_literal stm acc =
-    let stm = read_char stm in
-    let next_c = stm.next in
-    if is_digit next_c then scan_literal stm (acc ^ Char.escaped next_c)
+    let stm_next = read_char stm in
+    let c_next = stm_next.next in
+    if is_digit c_next then scan_literal stm_next (acc ^ Char.escaped c_next)
     else { stream = read_char stm; token = Some (Literal (int_of_string acc)) }
   in
   if is_alpha c then scan_identifier stm (Char.escaped c)
   else if is_digit c then scan_literal stm (Char.escaped c)
   else
     match c with
+    | '=' ->
+        let stm_next = read_char stm in
+        let c_next = stm.next in
+        if c_next = '=' then
+          { stream = read_char stm_next; token = Some Equals }
+        else { stream = read_char stm; token = Some Assign }
+    | '(' -> { stream = read_char stm; token = Some LeftParen }
+    | ')' -> { stream = read_char stm; token = Some RightParen }
     | '+' -> { stream = read_char stm; token = Some AddOp }
     | '-' -> { stream = read_char stm; token = Some SubOp }
     | '*' -> { stream = read_char stm; token = Some MulOp }
