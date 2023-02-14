@@ -107,7 +107,7 @@ let next_token scanner =
     match c with
     | '=' ->
         let stm_next = read_char stm in
-        let c_next = stm.next in
+        let c_next = stm_next.next in
         if c_next = '=' then
           { stream = read_char stm_next; token = Some Equals }
         else { stream = read_char stm; token = Some Assign }
