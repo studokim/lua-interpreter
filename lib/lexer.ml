@@ -81,9 +81,10 @@ type token =
   | Slash
 
 type scanner = { stream : stream; token : token option }
+type tokens = { before : token list; next : token option; after : token list }
 
 (* scans a stream and returns next token *)
-let next_token scanner =
+let scan_token scanner =
   let stm = skip_blank_chars scanner.stream in
   let c = stm.next in
   let rec scan_identifier stm acc =
@@ -124,12 +125,36 @@ let next_token scanner =
 
 let scan_all scanner =
   let rec insert_next scanner acc =
-    let scanner_next = next_token scanner in
+    let scanner_next = scan_token scanner in
     match scanner_next.token with
     | None -> acc
     | Some t -> t :: insert_next scanner_next acc
   in
-  insert_next scanner []
+  match insert_next scanner [] with
+  | [] -> { before = []; next = None; after = [] }
+  | head :: tail -> { before = []; next = Some head; after = tail }
+
+let scan_string str = scan_all { stream = stream_of_string str; token = None }
+
+(*** by Token list ***)
+
+let read_token tokens =
+  match tokens.next with
+  | None -> tokens
+  | Some t -> (
+      match tokens.after with
+      | [] -> { before = t :: tokens.before; next = None; after = [] }
+      | head :: tail ->
+          { before = t :: tokens.before; next = Some head; after = tail })
+
+let unread_token tokens =
+  match tokens.next with
+  | None -> tokens
+  | Some t -> (
+      match tokens.before with
+      | [] -> { before = []; next = None; after = t :: tokens.after }
+      | head :: tail ->
+          { before = tail; next = Some head; after = t :: tokens.after })
 
 (*** Tests ***)
 
