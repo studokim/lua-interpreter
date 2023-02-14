@@ -1,6 +1,10 @@
+let eof = '\000'
+
 (*** Streams ***)
 
 type stream = {
+  (* numbering starts from 0, last index of the N-character-long stream is N,
+     there are eofs infinitely to the left and to the right of the string *)
   index : int;
   (* before is backwards ordered *)
   before : char list;
@@ -10,8 +14,7 @@ type stream = {
 
 let read_char stm =
   match stm.after with
-  | [] ->
-      { index = stm.index; before = stm.before; next = Util.eof; after = [] }
+  | [] -> { index = stm.index + 1; before = stm.before; next = eof; after = [] }
   | head :: tail ->
       {
         index = stm.index + 1;
@@ -22,7 +25,7 @@ let read_char stm =
 
 let unread_char stm =
   match stm.before with
-  | [] -> raise End_of_file
+  | [] -> { index = stm.index - 1; before = []; next = eof; after = stm.after }
   | head :: tail ->
       {
         index = stm.index - 1;
@@ -33,7 +36,7 @@ let unread_char stm =
 
 let stream_of_string str =
   match Util.explode str with
-  | [] -> raise End_of_file
+  | [] -> { index = 0; before = []; next = eof; after = [] }
   | head :: tail -> { index = 0; before = []; next = head; after = tail }
 
 (*** by Character ***)
@@ -62,23 +65,25 @@ let rec skip_blank_chars stm =
 (*** by Token ***)
 
 (* all lang keywords/symbols *)
+type keyword = Print
+
 type token =
+  | Keyword of keyword
   | Identifier of string
-  | Print
   | Literal of int
   | Assign
   | Equals
   | LeftParen
   | RightParen
-  | AddOp
-  | SubOp
-  | MulOp
-  | DivOp
+  | Plus
+  | Minus
+  | Asterisk
+  | Slash
 
 type scanner = { stream : stream; token : token option }
 
 (* scans a stream and returns next token *)
-let scan scanner =
+let next_token scanner =
   let stm = skip_blank_chars scanner.stream in
   let c = stm.next in
   let rec scan_identifier stm acc =
@@ -86,7 +91,8 @@ let scan scanner =
     let c_next = stm_next.next in
     if is_alpha c_next || is_digit c_next || c_next = '_' then
       scan_identifier stm_next (acc ^ Char.escaped c_next)
-    else if acc = "print" then { stream = read_char stm; token = Some Print }
+    else if acc = "print" then
+      { stream = read_char stm; token = Some (Keyword Print) }
     else { stream = read_char stm; token = Some (Identifier acc) }
   in
   let rec scan_literal stm acc =
@@ -107,13 +113,23 @@ let scan scanner =
         else { stream = read_char stm; token = Some Assign }
     | '(' -> { stream = read_char stm; token = Some LeftParen }
     | ')' -> { stream = read_char stm; token = Some RightParen }
-    | '+' -> { stream = read_char stm; token = Some AddOp }
-    | '-' -> { stream = read_char stm; token = Some SubOp }
-    | '*' -> { stream = read_char stm; token = Some MulOp }
-    | '/' -> { stream = read_char stm; token = Some DivOp }
-    (* TODO: find out how to compile with Util.eof instead of '\000' *)
-    | '\000' -> raise End_of_file
+    | '+' -> { stream = read_char stm; token = Some Plus }
+    | '-' -> { stream = read_char stm; token = Some Minus }
+    | '*' -> { stream = read_char stm; token = Some Asterisk }
+    | '/' -> { stream = read_char stm; token = Some Slash }
+    (* TODO: find out how to compile with eof instead of '\000'
+       couldn't find any way to create a const or named literals *)
+    | '\000' -> { stream = stm; token = None }
     | _ -> syntax_error stm "couldn't identify the token"
+
+let scan_all scanner =
+  let rec insert_next scanner acc =
+    let scanner_next = next_token scanner in
+    match scanner_next.token with
+    | None -> acc
+    | Some t -> t :: insert_next scanner_next acc
+  in
+  insert_next scanner []
 
 (*** Tests ***)
 
@@ -121,4 +137,3 @@ let blank = stream_of_string "   non_blank   "
 let blank_skipped = skip_blank_chars blank
 let program = stream_of_string "x + 1"
 let s = { stream = program; token = None }
-let _ = s

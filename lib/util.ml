@@ -20,5 +20,3 @@ let explode str =
     else chars
   in
   explode_inner 0 []
-
-let eof = '\000'
