@@ -68,17 +68,17 @@ let rec skip_blank_chars stm =
 type keyword = Print
 
 type token =
-  | Keyword of keyword
-  | Identifier of string
-  | Literal of int
-  | Assign
-  | Equals
-  | LeftParen
-  | RightParen
-  | Plus
-  | Minus
-  | Asterisk
-  | Slash
+  | TKeyword of keyword
+  | TIdentifier of string
+  | TLiteral of int
+  | TAssign
+  | TEquals
+  | TLeftParen
+  | TRightParen
+  | TPlus
+  | TMinus
+  | TAsterisk
+  | TSlash
 
 type scanner = { stream : stream; token : token option }
 type tokens = { before : token list; next : token option; after : token list }
@@ -93,14 +93,14 @@ let scan_token scanner =
     if is_alpha c_next || is_digit c_next || c_next = '_' then
       scan_identifier stm_next (acc ^ Char.escaped c_next)
     else if acc = "print" then
-      { stream = read_char stm; token = Some (Keyword Print) }
-    else { stream = read_char stm; token = Some (Identifier acc) }
+      { stream = read_char stm; token = Some (TKeyword Print) }
+    else { stream = read_char stm; token = Some (TIdentifier acc) }
   in
   let rec scan_literal stm acc =
     let stm_next = read_char stm in
     let c_next = stm_next.next in
     if is_digit c_next then scan_literal stm_next (acc ^ Char.escaped c_next)
-    else { stream = read_char stm; token = Some (Literal (int_of_string acc)) }
+    else { stream = read_char stm; token = Some (TLiteral (int_of_string acc)) }
   in
   if is_alpha c then scan_identifier stm (Char.escaped c)
   else if is_digit c then scan_literal stm (Char.escaped c)
@@ -110,14 +110,14 @@ let scan_token scanner =
         let stm_next = read_char stm in
         let c_next = stm_next.next in
         if c_next = '=' then
-          { stream = read_char stm_next; token = Some Equals }
-        else { stream = read_char stm; token = Some Assign }
-    | '(' -> { stream = read_char stm; token = Some LeftParen }
-    | ')' -> { stream = read_char stm; token = Some RightParen }
-    | '+' -> { stream = read_char stm; token = Some Plus }
-    | '-' -> { stream = read_char stm; token = Some Minus }
-    | '*' -> { stream = read_char stm; token = Some Asterisk }
-    | '/' -> { stream = read_char stm; token = Some Slash }
+          { stream = read_char stm_next; token = Some TEquals }
+        else { stream = read_char stm; token = Some TAssign }
+    | '(' -> { stream = read_char stm; token = Some TLeftParen }
+    | ')' -> { stream = read_char stm; token = Some TRightParen }
+    | '+' -> { stream = read_char stm; token = Some TPlus }
+    | '-' -> { stream = read_char stm; token = Some TMinus }
+    | '*' -> { stream = read_char stm; token = Some TAsterisk }
+    | '/' -> { stream = read_char stm; token = Some TSlash }
     (* TODO: find out how to compile with eof instead of '\000'
        couldn't find any way to create a const or named literals *)
     | '\000' -> { stream = stm; token = None }
