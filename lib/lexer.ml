@@ -156,6 +156,21 @@ let unread_token tokens =
       | head :: tail ->
           { before = tail; next = Some head; after = t :: tokens.after })
 
+(* read token at n positions ahead
+   i.e. if tokens are
+   {before = []; next = Some (Identifier "x"); after = [Plus; Literal 1]}
+   then match_at 0 matches Identifier "x",
+        match_at 2 matches Literal 1.
+*)
+let rec read_token_at n tokens =
+  if n > 0 then
+    let tokens_next = read_token tokens in
+    read_token_at (n - 1) tokens_next
+  else if n < 0 then
+    let tokens_prev = unread_token tokens in
+    read_token_at (n + 1) tokens_prev
+  else tokens
+
 (*** Tests ***)
 
 let blank = stream_of_string "   non_blank   "

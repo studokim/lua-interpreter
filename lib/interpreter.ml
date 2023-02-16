@@ -31,7 +31,7 @@ let rec execute_expr expression env =
         | Name name ->
             prerr_string ("Identifier `" ^ name ^ "` not declared.\n");
             Numeric (-1)))
-  | Binary (left, op, right) -> (
+  | Binop (left, op, right) -> (
       let litl = execute_expr left env in
       let litr = execute_expr right env in
       match litl with
@@ -82,11 +82,11 @@ let ast =
     [
       Assignment (var, Literal zero);
       Assignment (var, Literal (Numeric 10));
-      Assignment (var, Binary (Literal (Numeric 3), SubOp, Literal (Numeric 2)));
+      Assignment (var, Binop (Literal (Numeric 3), SubOp, Literal (Numeric 2)));
       Assignment (Name "arg1", Literal zero);
       Assignment (Name "arg2", Literal (Numeric 1));
       Assignment
-        (Name "arg2", Binary (Literal (Numeric 2), AddOp, Literal (Numeric 3)));
+        (Name "arg2", Binop (Literal (Numeric 2), AddOp, Literal (Numeric 3)));
       Call
         ( Name "print",
           [ Identifier (Name "arg2"); Literal (Numeric 19); Literal zero ] );
@@ -94,8 +94,8 @@ let ast =
         ( Name "print",
           [
             Identifier var;
-            Binary
-              ( Binary (Identifier (Name "var"), MulOp, Literal (Numeric 5)),
+            Binop
+              ( Binop (Identifier (Name "var"), MulOp, Literal (Numeric 5)),
                 MulOp,
                 Literal (Numeric 3) );
           ] );

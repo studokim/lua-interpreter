@@ -6,7 +6,7 @@ type operator = AddOp | SubOp | MulOp | DivOp
 type expression =
   | Identifier of identifier
   | Literal of literal
-  | Binary of expression * operator * expression
+  | Binop of expression * operator * expression
 
 type statement =
   | Assignment of identifier * expression
