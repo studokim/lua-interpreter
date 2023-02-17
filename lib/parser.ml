@@ -1,27 +1,35 @@
 open Angstrom
+open Ast
 open Lexer
 
 (*** Individual Parsing ***)
 
-module Identifier = struct
-  let is_identifier c = is_alpha c || is_digit c || c = '_'
+let whitespace =
+  let is_whitespace = function
+    | ' ' | '\t' | '\r' | '\n' -> true
+    | _ -> false
+  in
+  take_while is_whitespace
+;;
 
-  let identifier =
+module Identifier = struct
+  let name =
+    let is_name c = is_alpha c || is_digit c || c = '_' in
     let first =
       peek_char
       >>= function
-      | Some c when is_alpha c || c = '_' -> return c
+      | Some c when is_alpha c || c = '_' -> advance 1 *> return c
       | _ -> fail "alpha or underscore expected"
     in
     first
     >>= fun first ->
-    take_while is_identifier >>= fun rest -> return (Char.escaped first ^ rest)
+    take_while is_name
+    >>= fun rest -> return (Identifier (Name (Char.escaped first ^ rest)))
   ;;
-
-  let parse_identifier code = parse_string ~consume:All identifier code
 end
 
-module Numeric = struct
+module Literal = struct
+  (* there could be exponents https://www.lua.org/pil/2.3.html *)
   let sign =
     peek_char
     >>= function
@@ -34,7 +42,8 @@ module Numeric = struct
   let int =
     sign
     >>= fun sign ->
-    take_while1 is_digit >>= fun integer -> return (int_of_string (sign ^ integer))
+    take_while1 is_digit
+    >>= fun integer -> return (Literal (Numeric (float_of_string (sign ^ integer))))
   ;;
 
   let float =
@@ -44,28 +53,63 @@ module Numeric = struct
     <* char '.'
     >>= fun integer ->
     take_while1 is_digit
-    >>= fun fraction -> return (float_of_string (sign ^ integer ^ "." ^ fraction))
+    >>= fun fraction ->
+    return (Literal (Numeric (float_of_string (sign ^ integer ^ "." ^ fraction))))
   ;;
 
-  let parse_float code = parse_string ~consume:All float code
-  let parse_int code = parse_string ~consume:All int code
+  let numeric = choice [ float; int ]
 end
 
 (*** Combined Parsing ***)
 
+let parse_all parser string = parse_string ~consume:All parser string
+
+module Binop = struct
+  open Literal
+
+  let operator =
+    peek_char
+    >>= function
+    | Some '+' -> advance 1 *> return AddOp
+    | Some '-' -> advance 1 *> return SubOp
+    | Some '*' -> advance 1 *> return MulOp
+    | Some '/' -> advance 1 *> return DivOp
+    | _ -> fail "arithmetic operator expected"
+  ;;
+
+  let binop_constructor (left : expression) (op : operator) (right : expression)
+    : expression
+    =
+    Binop (left, op, right)
+  ;;
+
+  let binop =
+    lift3
+      binop_constructor
+      (whitespace *> numeric <* whitespace)
+      operator
+      (whitespace *> numeric <* whitespace)
+  ;;
+end
+
 (*** Tests ***)
 
-let test_assign = scan_string "x = 1"
+let unpack = function
+  | Result.Ok r -> r
+  | _ -> failwith "cannot unpack"
+;;
+
+let test_assign = "x = 1"
 (*
    Chunk (Assignment (Name "x", Literal (Numeric 1)) :: [])
 *)
 
-let test_binop = scan_string "1 + 2"
+let test_binop = "1 + 2"
 (*
   Chunk (Binary (Literal (Numeric 1), "+", Literal (Numeric 2)) :: [])
 *)
 
-let test_assign_binop = scan_string "x = 1 + 2"
+let test_assign_binop = "x = 1 + 2"
 (*
   Chunk (Assignment (Name "x", Binary (Literal (Numeric 1), "+", Literal (Numeric 2))) :: [])
 *)
