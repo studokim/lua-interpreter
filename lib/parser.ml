@@ -3,14 +3,32 @@ open Lexer
 
 (*** Individual Parsing ***)
 
-module Number = struct
+module Identifier = struct
+  let is_identifier c = is_alpha c || is_digit c || c = '_'
+
+  let identifier =
+    let first =
+      peek_char
+      >>= function
+      | Some c when is_alpha c || c = '_' -> return c
+      | _ -> fail "alpha or underscore expected"
+    in
+    first
+    >>= fun first ->
+    take_while is_identifier >>= fun rest -> return (Char.escaped first ^ rest)
+  ;;
+
+  let parse_identifier code = parse_string ~consume:All identifier code
+end
+
+module Numeric = struct
   let sign =
     peek_char
     >>= function
-    | Some '-' -> advance 1 >>| fun () -> "-"
-    | Some '+' -> advance 1 >>| fun () -> "+"
+    | Some '-' -> advance 1 *> return "-"
+    | Some '+' -> advance 1 *> return "+"
     | Some c when is_digit c -> return "+"
-    | _ -> fail "Sign or digit expected"
+    | _ -> fail "sign or digit expected"
   ;;
 
   let int =
