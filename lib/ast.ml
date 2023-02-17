@@ -1,6 +1,6 @@
 (* Functions are first-order *)
 type identifier = Name of string
-type literal = Numeric of int
+type literal = Numeric of float
 
 type operator =
   | AddOp

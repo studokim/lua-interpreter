@@ -19,7 +19,7 @@ let show_var id lit =
   match id with
   | Name name ->
     (match lit with
-     | Numeric num -> print_string (name ^ " = " ^ string_of_int num ^ "\n"))
+     | Numeric num -> print_string (name ^ " = " ^ string_of_float num ^ "\n"))
 ;;
 
 let show_vars env = IdentMap.iter show_var env
@@ -35,7 +35,7 @@ let rec execute_expr expression env =
        (match id with
         | Name name ->
           prerr_string ("Identifier `" ^ name ^ "` not declared.\n");
-          Numeric (-1)))
+          Numeric (-1.)))
   | Binop (left, op, right) ->
     let litl = execute_expr left env in
     let litr = execute_expr right env in
@@ -44,10 +44,10 @@ let rec execute_expr expression env =
        (match litr with
         | Numeric numr ->
           (match op with
-           | AddOp -> Numeric (numl + numr)
-           | SubOp -> Numeric (numl - numr)
-           | MulOp -> Numeric (numl * numr)
-           | DivOp -> Numeric (numl / numr))))
+           | AddOp -> Numeric (numl +. numr)
+           | SubOp -> Numeric (numl -. numr)
+           | MulOp -> Numeric (numl *. numr)
+           | DivOp -> Numeric (numl /. numr))))
 ;;
 
 let rec print args env =
@@ -56,7 +56,7 @@ let rec print args env =
   | head :: tail ->
     (match execute_expr head env with
      | Numeric num ->
-       print_int num;
+       print_float num;
        if tail != [] then print_char ' ';
        print tail env)
 ;;
@@ -84,24 +84,25 @@ let rec execute_ast chunk env =
 
 let vars = IdentMap.empty
 let var = Name "var"
-let zero = Numeric 0
+let zero = Numeric 0.
 
 let ast =
   Chunk
     [ Assignment (var, Literal zero)
-    ; Assignment (var, Literal (Numeric 10))
-    ; Assignment (var, Binop (Literal (Numeric 3), SubOp, Literal (Numeric 2)))
+    ; Assignment (var, Literal (Numeric 10.))
+    ; Assignment (var, Binop (Literal (Numeric 3.), SubOp, Literal (Numeric 2.)))
     ; Assignment (Name "arg1", Literal zero)
-    ; Assignment (Name "arg2", Literal (Numeric 1))
-    ; Assignment (Name "arg2", Binop (Literal (Numeric 2), AddOp, Literal (Numeric 3)))
-    ; Call (Name "print", [ Identifier (Name "arg2"); Literal (Numeric 19); Literal zero ])
+    ; Assignment (Name "arg2", Literal (Numeric 1.))
+    ; Assignment (Name "arg2", Binop (Literal (Numeric 2.), AddOp, Literal (Numeric 3.)))
+    ; Call
+        (Name "print", [ Identifier (Name "arg2"); Literal (Numeric 19.); Literal zero ])
     ; Call
         ( Name "print"
         , [ Identifier var
           ; Binop
-              ( Binop (Identifier (Name "var"), MulOp, Literal (Numeric 5))
+              ( Binop (Identifier (Name "var"), MulOp, Literal (Numeric 5.))
               , MulOp
-              , Literal (Numeric 3) )
+              , Literal (Numeric 3.) )
           ] )
     ; Call (Name "print", [])
     ]
