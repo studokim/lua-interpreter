@@ -1,7 +1,12 @@
 (* Functions are first-order *)
 type identifier = Name of string
 type literal = Numeric of int
-type operator = AddOp | SubOp | MulOp | DivOp
+
+type operator =
+  | AddOp
+  | SubOp
+  | MulOp
+  | DivOp
 
 type expression =
   | Identifier of identifier
