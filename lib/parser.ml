@@ -30,39 +30,33 @@ end
 
 module Literal = struct
   (* there could be exponents https://www.lua.org/pil/2.3.html *)
-  let sign =
+  let numeric =
+    let sign =
+      peek_char
+      >>= function
+      | Some '-' -> advance 1 *> return "-"
+      | Some '+' -> advance 1 *> return "+"
+      | Some c when is_digit c -> return "+"
+      | _ -> fail "sign or digit expected"
+    in
+    sign
+    >>= fun sign ->
+    take_while1 is_digit
+    >>= fun integer ->
     peek_char
     >>= function
-    | Some '-' -> advance 1 *> return "-"
-    | Some '+' -> advance 1 *> return "+"
-    | Some c when is_digit c -> return "+"
-    | _ -> fail "sign or digit expected"
+    | Some '.' ->
+      advance 1 *> take_while1 is_digit
+      >>= fun fraction ->
+      return (Literal (Numeric (float_of_string (sign ^ integer ^ "." ^ fraction))))
+    | _ -> return (Literal (Numeric (float_of_string (sign ^ integer))))
   ;;
-
-  let int =
-    sign
-    >>= fun sign ->
-    take_while1 is_digit
-    >>= fun integer -> return (Literal (Numeric (float_of_string (sign ^ integer))))
-  ;;
-
-  let float =
-    sign
-    >>= fun sign ->
-    take_while1 is_digit
-    <* char '.'
-    >>= fun integer ->
-    take_while1 is_digit
-    >>= fun fraction ->
-    return (Literal (Numeric (float_of_string (sign ^ integer ^ "." ^ fraction))))
-  ;;
-
-  let numeric = choice [ float; int ]
 end
 
 (*** Combined Parsing ***)
 
 let parse_all parser string = parse_string ~consume:All parser string
+let parse_prefix parser string = parse_string ~consume:Prefix parser string
 
 module Binop = struct
   open Literal
