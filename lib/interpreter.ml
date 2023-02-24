@@ -61,8 +61,11 @@ let rec print args env =
        print tail env)
 ;;
 
-let execute_stm statement env =
+let execute_stmt statement env =
   match statement with
+  | Expression expr ->
+    print [ Literal (execute_expr expr env) ] env;
+    env
   | Call (Name func, args) ->
     (match func with
      | "print" ->
@@ -77,7 +80,7 @@ let execute_stm statement env =
 let rec execute_ast chunk env =
   match chunk with
   | Chunk [] -> env
-  | Chunk (head :: tail) -> execute_stm head env |> execute_ast (Chunk tail)
+  | Chunk (head :: tail) -> execute_stmt head env |> execute_ast (Chunk tail)
 ;;
 
 (*** Tests ***)
