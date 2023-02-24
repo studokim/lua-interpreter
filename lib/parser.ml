@@ -12,22 +12,6 @@ let whitespace =
   take_while is_whitespace
 ;;
 
-module Identifier = struct
-  let name =
-    let is_name c = is_alpha c || is_digit c || c = '_' in
-    let first =
-      peek_char
-      >>= function
-      | Some c when is_alpha c || c = '_' -> advance 1 *> return c
-      | _ -> fail "alpha or underscore expected"
-    in
-    first
-    >>= fun first ->
-    take_while is_name
-    >>= fun rest -> return (Identifier (Name (Char.escaped first ^ rest)))
-  ;;
-end
-
 module Literal = struct
   (* there could be exponents https://www.lua.org/pil/2.3.html *)
   let numeric =
@@ -55,11 +39,20 @@ end
 
 (*** Combined Parsing ***)
 
-let parse_all parser string = parse_string ~consume:All parser string
-let parse_prefix parser string = parse_string ~consume:Prefix parser string
-
-module Binop = struct
-  open Literal
+module Expression = struct
+  let identifier =
+    let is_name c = is_alpha c || is_digit c || c = '_' in
+    let first =
+      peek_char
+      >>= function
+      | Some c when is_alpha c || c = '_' -> advance 1 *> return c
+      | _ -> fail "alpha or underscore expected"
+    in
+    first
+    >>= fun first ->
+    take_while is_name
+    >>= fun rest -> return (Identifier (Name (Char.escaped first ^ rest)))
+  ;;
 
   let operator =
     peek_char
@@ -71,26 +64,38 @@ module Binop = struct
     | _ -> fail "arithmetic operator expected"
   ;;
 
-  let binop_constructor (left : expression) (op : operator) (right : expression)
-    : expression
-    =
-    Binop (left, op, right)
-  ;;
+  let parens p = char '(' *> p <* char ')'
 
   let binop =
-    lift3
-      binop_constructor
-      (whitespace *> numeric <* whitespace)
-      operator
-      (whitespace *> numeric <* whitespace)
+    fix (fun expression ->
+      let binop_constructor left op right = Binop (left, op, right) in
+      let binop =
+        lift3
+          binop_constructor
+          (whitespace *> expression)
+          (whitespace *> operator <* whitespace)
+          (expression <* whitespace)
+      in
+      choice [ identifier; Literal.numeric; parens binop ])
   ;;
 end
 
 (*** Tests ***)
 
+let parse_all parser string = parse_string ~consume:All parser string
+let parse_prefix parser string = parse_string ~consume:Prefix parser string
+
 let unpack = function
   | Result.Ok r -> r
   | _ -> failwith "cannot unpack"
+;;
+
+let wrap_stmt = function
+  | s -> Chunk [ s ]
+;;
+
+let wrap_expr = function
+  | e -> Chunk [ Expression e ]
 ;;
 
 let test_assign = "x = 1"
