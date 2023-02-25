@@ -12,7 +12,7 @@ let whitespace =
   take_while is_whitespace
 ;;
 
-let parens p = char '(' *> p <* char ')'
+let parens p = char '(' *> whitespace *> p <* whitespace <* char ')'
 
 module Identifier = struct
   let name =
@@ -60,17 +60,16 @@ module Expression = struct
   let identifier = Identifier.name >>= fun result -> return (Identifier result)
   let literal = Literal.numeric >>= fun result -> return (Literal result)
 
-  let operator =
-    peek_char
-    >>= function
-    | Some '+' -> advance 1 *> return AddOp
-    | Some '-' -> advance 1 *> return SubOp
-    | Some '*' -> advance 1 *> return MulOp
-    | Some '/' -> advance 1 *> return DivOp
-    | _ -> fail "arithmetic operator expected"
-  ;;
-
   let binop =
+    let operator =
+      peek_char
+      >>= function
+      | Some '+' -> advance 1 *> return AddOp
+      | Some '-' -> advance 1 *> return SubOp
+      | Some '*' -> advance 1 *> return MulOp
+      | Some '/' -> advance 1 *> return DivOp
+      | _ -> fail "arithmetic operator expected"
+    in
     fix (fun expression ->
       let binop_constructor left op right = Binop (left, op, right) in
       let binop =
@@ -80,33 +79,46 @@ module Expression = struct
           operator
           (whitespace *> expression <* whitespace)
       in
-      choice [ identifier; literal; parens binop ])
+      choice [ identifier; parens identifier; literal; parens literal; parens binop ])
   ;;
+
+  let expression = binop
 end
 
 module Statement = struct
-  let operator =
-    peek_char
-    >>= function
-    | Some '=' -> advance 1
-    | _ -> fail "assignment operator expected"
-  ;;
-
   let assignment =
+    let operator =
+      peek_char
+      >>= function
+      | Some '=' -> advance 1
+      | _ -> fail "assignment operator expected"
+    in
     let assignment_constructor id expr = Assignment (id, expr) in
     lift2
       assignment_constructor
       (Identifier.name <* whitespace <* operator)
-      (whitespace *> Expression.binop)
+      (whitespace *> Expression.expression)
   ;;
 
   let call =
-    let separator = whitespace *> char ',' <* whitespace in
+    let separator = char ',' in
     let call_constructor id exprs = Call (id, exprs) in
     lift2
       call_constructor
       (Identifier.name <* whitespace)
-      (parens (sep_by separator Expression.binop))
+      (parens (sep_by separator (whitespace *> Expression.expression <* whitespace)))
+  ;;
+
+  let statement = choice [ assignment; call ]
+end
+
+module Chunk = struct
+  let chunk =
+    let separator = string ";" <|> whitespace in
+    let chunk_constructor stmts = Chunk stmts in
+    lift
+      chunk_constructor
+      (sep_by separator (whitespace *> Statement.statement <* whitespace))
   ;;
 end
 
@@ -118,10 +130,6 @@ let parse_prefix parser string = parse_string ~consume:Prefix parser string
 let unpack = function
   | Result.Ok r -> r
   | _ -> failwith "cannot unpack"
-;;
-
-let wrap_stmt = function
-  | s -> Chunk [ s ]
 ;;
 
 let test_assign = "x = 1"
