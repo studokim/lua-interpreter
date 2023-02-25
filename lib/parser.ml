@@ -12,6 +12,21 @@ let whitespace =
   take_while is_whitespace
 ;;
 
+module Identifier = struct
+  let name =
+    let is_name c = is_alpha c || is_digit c || c = '_' in
+    let first =
+      peek_char
+      >>= function
+      | Some c when is_alpha c || c = '_' -> advance 1 *> return c
+      | _ -> fail "alpha or underscore expected"
+    in
+    first
+    >>= fun first ->
+    take_while is_name >>= fun rest -> return (Name (Char.escaped first ^ rest))
+  ;;
+end
+
 module Literal = struct
   (* there could be exponents https://www.lua.org/pil/2.3.html *)
   let numeric =
@@ -32,27 +47,16 @@ module Literal = struct
     | Some '.' ->
       advance 1 *> take_while1 is_digit
       >>= fun fraction ->
-      return (Literal (Numeric (float_of_string (sign ^ integer ^ "." ^ fraction))))
-    | _ -> return (Literal (Numeric (float_of_string (sign ^ integer))))
+      return (Numeric (float_of_string (sign ^ integer ^ "." ^ fraction)))
+    | _ -> return (Numeric (float_of_string (sign ^ integer)))
   ;;
 end
 
 (*** Combined Parsing ***)
 
 module Expression = struct
-  let identifier =
-    let is_name c = is_alpha c || is_digit c || c = '_' in
-    let first =
-      peek_char
-      >>= function
-      | Some c when is_alpha c || c = '_' -> advance 1 *> return c
-      | _ -> fail "alpha or underscore expected"
-    in
-    first
-    >>= fun first ->
-    take_while is_name
-    >>= fun rest -> return (Identifier (Name (Char.escaped first ^ rest)))
-  ;;
+  let identifier = Identifier.name >>= fun result -> return (Identifier result)
+  let literal = Literal.numeric >>= fun result -> return (Literal result)
 
   let operator =
     peek_char
@@ -72,11 +76,30 @@ module Expression = struct
       let binop =
         lift3
           binop_constructor
-          (whitespace *> expression)
-          (whitespace *> operator <* whitespace)
-          (expression <* whitespace)
+          (whitespace *> expression <* whitespace)
+          operator
+          (whitespace *> expression <* whitespace)
       in
-      choice [ identifier; Literal.numeric; parens binop ])
+      choice [ identifier; literal; parens binop ])
+  ;;
+end
+
+module Statement = struct
+  let expression = Expression.binop >>= fun result -> return (Expression result)
+
+  let operator =
+    peek_char
+    >>= function
+    | Some '=' -> advance 1
+    | _ -> fail "assignment operator expected"
+  ;;
+
+  let assignment =
+    let assignment_constructor id expr = Assignment (id, expr) in
+    lift2
+      assignment_constructor
+      (Identifier.name <* whitespace <* operator)
+      (whitespace *> Expression.binop)
   ;;
 end
 
@@ -92,10 +115,6 @@ let unpack = function
 
 let wrap_stmt = function
   | s -> Chunk [ s ]
-;;
-
-let wrap_expr = function
-  | e -> Chunk [ Expression e ]
 ;;
 
 let test_assign = "x = 1"
