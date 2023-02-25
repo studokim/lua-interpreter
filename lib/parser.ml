@@ -12,6 +12,8 @@ let whitespace =
   take_while is_whitespace
 ;;
 
+let parens p = char '(' *> p <* char ')'
+
 module Identifier = struct
   let name =
     let is_name c = is_alpha c || is_digit c || c = '_' in
@@ -68,8 +70,6 @@ module Expression = struct
     | _ -> fail "arithmetic operator expected"
   ;;
 
-  let parens p = char '(' *> p <* char ')'
-
   let binop =
     fix (fun expression ->
       let binop_constructor left op right = Binop (left, op, right) in
@@ -100,6 +100,15 @@ module Statement = struct
       assignment_constructor
       (Identifier.name <* whitespace <* operator)
       (whitespace *> Expression.binop)
+  ;;
+
+  let call =
+    let separator = whitespace *> char ',' <* whitespace in
+    let call_constructor id exprs = Call (id, exprs) in
+    lift2
+      call_constructor
+      (Identifier.name <* whitespace)
+      (parens (sep_by separator Expression.binop))
   ;;
 end
 
