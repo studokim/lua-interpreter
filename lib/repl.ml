@@ -12,8 +12,8 @@ let read_input () =
   String.concat " ; " (next_line [])
 ;;
 
-let execute input env = execute_chunk (Parser.parse input) env
-let vars = IdentMap.empty
+let execute input env = Executor.execute_chunk (Parser.parse input) env
+let vars = Environment.VariableMap.empty
 
 let rec iterate env =
   try

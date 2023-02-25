@@ -2,79 +2,74 @@ open Ast
 
 (*** Environment ***)
 
-module Ident = struct
-  type t = identifier
+module Environment = struct
+  module Variable = struct
+    type t = identifier
 
-  let compare id1 id2 =
-    match id1 with
-    | Name nm1 ->
-      (match id2 with
-       | Name nm2 -> compare nm1 nm2)
+    let compare id1 id2 =
+      match id1 with
+      | Name nm1 ->
+        (match id2 with
+         | Name nm2 -> compare nm1 nm2)
+    ;;
+  end
+
+  module VariableMap = Map.Make (Variable)
+
+  let show_var id lit =
+    match id with
+    | Name name ->
+      (match lit with
+       | Numeric num -> print_string (name ^ " = " ^ string_of_float num ^ "\n"))
   ;;
+
+  let show_vars env = VariableMap.iter show_var env
 end
 
-module IdentMap = Map.Make (Ident)
+(*** Executor ***)
 
-let show_var id lit =
-  match id with
-  | Name name ->
-    (match lit with
-     | Numeric num -> print_string (name ^ " = " ^ string_of_float num ^ "\n"))
-;;
+module Executor = struct
+  open Environment
 
-let show_vars env = IdentMap.iter show_var env
+  let rec execute_expr expression env =
+    match expression with
+    | Literal lit -> lit
+    | Identifier id ->
+      (try VariableMap.find id env with
+       | Not_found ->
+         (match id with
+          | Name name -> failwith ("identifier `" ^ name ^ "` not declared")))
+    | Binop (left, op, right) ->
+      let litl = execute_expr left env in
+      let litr = execute_expr right env in
+      (match litl with
+       | Numeric numl ->
+         (match litr with
+          | Numeric numr ->
+            (match op with
+             | AddOp -> Numeric (numl +. numr)
+             | SubOp -> Numeric (numl -. numr)
+             | MulOp -> Numeric (numl *. numr)
+             | DivOp -> Numeric (numl /. numr))))
+  ;;
 
-(*** Interpreter ***)
+  let execute_stmt statement env =
+    match statement with
+    | Call (Name func, _) ->
+      (match func with
+       | "__show_vars" ->
+         show_vars env;
+         env
+       | _ -> failwith ("function `" ^ func ^ "` not implemented"))
+    | Assignment (id, expr) -> VariableMap.add id (execute_expr expr env) env
+  ;;
 
-let rec execute_expr expression env =
-  match expression with
-  | Literal lit -> lit
-  | Identifier id ->
-    (try IdentMap.find id env with
-     | Not_found ->
-       (match id with
-        | Name name -> failwith ("identifier `" ^ name ^ "` not declared")))
-  | Binop (left, op, right) ->
-    let litl = execute_expr left env in
-    let litr = execute_expr right env in
-    (match litl with
-     | Numeric numl ->
-       (match litr with
-        | Numeric numr ->
-          (match op with
-           | AddOp -> Numeric (numl +. numr)
-           | SubOp -> Numeric (numl -. numr)
-           | MulOp -> Numeric (numl *. numr)
-           | DivOp -> Numeric (numl /. numr))))
-;;
-
-let rec print args env =
-  match args with
-  | [] -> print_newline ()
-  | head :: tail ->
-    (match execute_expr head env with
-     | Numeric num ->
-       print_float num;
-       if tail != [] then print_char ' ';
-       print tail env)
-;;
-
-let execute_stmt statement env =
-  match statement with
-  | Call (Name func, args) ->
-    (match func with
-     | "print" ->
-       print args env;
-       env
-     | _ -> failwith ("function `" ^ func ^ "` not implemented"))
-  | Assignment (id, expr) -> IdentMap.add id (execute_expr expr env) env
-;;
-
-let rec execute_chunk chunk env =
-  match chunk with
-  | Chunk [] -> env
-  | Chunk (head :: tail) -> execute_stmt head env |> execute_chunk (Chunk tail)
-;;
+  let rec execute_chunk chunk env =
+    match chunk with
+    | Chunk [] -> env
+    | Chunk (head :: tail) -> execute_stmt head env |> execute_chunk (Chunk tail)
+  ;;
+end
 
 (*** Tests ***)
 
