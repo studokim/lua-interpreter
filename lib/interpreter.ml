@@ -15,8 +15,6 @@ end
 
 module IdentMap = Map.Make (Ident)
 
-let vars = IdentMap.empty
-
 let show_var id lit =
   match id with
   | Name name ->
@@ -35,9 +33,7 @@ let rec execute_expr expression env =
     (try IdentMap.find id env with
      | Not_found ->
        (match id with
-        | Name name ->
-          prerr_string ("Identifier `" ^ name ^ "` not declared.\n");
-          Numeric (-1.)))
+        | Name name -> failwith ("identifier `" ^ name ^ "` not declared")))
   | Binop (left, op, right) ->
     let litl = execute_expr left env in
     let litr = execute_expr right env in
@@ -70,16 +66,14 @@ let execute_stmt statement env =
      | "print" ->
        print args env;
        env
-     | _ ->
-       prerr_string ("Function `" ^ func ^ "` not implemented.\n");
-       env)
+     | _ -> failwith ("function `" ^ func ^ "` not implemented"))
   | Assignment (id, expr) -> IdentMap.add id (execute_expr expr env) env
 ;;
 
-let rec execute_ast chunk env =
+let rec execute_chunk chunk env =
   match chunk with
   | Chunk [] -> env
-  | Chunk (head :: tail) -> execute_stmt head env |> execute_ast (Chunk tail)
+  | Chunk (head :: tail) -> execute_stmt head env |> execute_chunk (Chunk tail)
 ;;
 
 (*** Tests ***)

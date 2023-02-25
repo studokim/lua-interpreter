@@ -131,12 +131,13 @@ module Chunk = struct
   ;;
 end
 
-(*** Tests ***)
+(*** Helpers ***)
+
+let unpack = function
+  | Result.Ok ast_node -> ast_node
+  | Result.Error e -> failwith ("parsing error" ^ e)
+;;
 
 let parse_all parser string = parse_string ~consume:All parser string
 let parse_prefix parser string = parse_string ~consume:Prefix parser string
-
-let unpack = function
-  | Result.Ok r -> r
-  | _ -> failwith "cannot unpack"
-;;
+let parse string = unpack (parse_all Chunk.chunk string)
