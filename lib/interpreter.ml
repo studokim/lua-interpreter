@@ -20,7 +20,8 @@ module Environment = struct
     match id with
     | Name name ->
       (match lit with
-       | Numeric num -> print_string (name ^ " = " ^ string_of_float num ^ "\n"))
+       | Numeric num -> print_string (name ^ " = " ^ string_of_float num ^ "\n")
+       | String str -> print_string (name ^ " = \"" ^ str ^ "\"\n"))
   ;;
 
   let show_vars env = VariableMap.iter show_var env
@@ -50,7 +51,9 @@ module Executor = struct
              | AddOp -> Numeric (numl +. numr)
              | SubOp -> Numeric (numl -. numr)
              | MulOp -> Numeric (numl *. numr)
-             | DivOp -> Numeric (numl /. numr))))
+             | DivOp -> Numeric (numl /. numr))
+          | String _ -> failwith "cannot operate with strings")
+       | String _ -> failwith "cannot operate with strings")
   ;;
 
   let execute_stmt statement env =

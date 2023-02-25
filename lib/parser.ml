@@ -61,13 +61,20 @@ module Literal = struct
       return (Numeric (float_of_string (sign ^ integer ^ "." ^ fraction)))
     | _ -> return (Numeric (float_of_string (sign ^ integer)))
   ;;
+
+  let string =
+    let is_quote c = c = '"' in
+    char '"' *> take_till is_quote <* char '"' >>= fun s -> return (String s)
+  ;;
+
+  let literal = choice [ numeric; string ]
 end
 
 (*** Combined Parsing ***)
 
 module Expression = struct
   let identifier = Identifier.name >>= fun result -> return (Identifier result)
-  let literal = Literal.numeric >>= fun result -> return (Literal result)
+  let literal = Literal.literal >>= fun result -> return (Literal result)
 
   let binop =
     let operator =

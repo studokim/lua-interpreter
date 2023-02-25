@@ -1,6 +1,9 @@
 (* Functions are first-order *)
 type identifier = Name of string
-type literal = Numeric of float
+
+type literal =
+  | Numeric of float
+  | String of string
 
 type operator =
   | AddOp
