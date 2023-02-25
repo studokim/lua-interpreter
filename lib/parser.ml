@@ -1,8 +1,17 @@
 open Angstrom
 open Ast
-open Lexer
 
 (*** Individual Parsing ***)
+let is_digit c =
+  let code = Char.code c in
+  code >= Char.code '0' && code <= Char.code '9'
+;;
+
+let is_alpha c =
+  let code = Char.code c in
+  (code >= Char.code 'A' && code <= Char.code 'Z')
+  || (code >= Char.code 'a' && code <= Char.code 'z')
+;;
 
 let whitespace =
   let is_whitespace = function
@@ -131,18 +140,3 @@ let unpack = function
   | Result.Ok r -> r
   | _ -> failwith "cannot unpack"
 ;;
-
-let test_assign = "x = 1"
-(*
-   Chunk (Assignment (Name "x", Literal (Numeric 1)) :: [])
-*)
-
-let test_binop = "1 + 2"
-(*
-  Chunk (Binary (Literal (Numeric 1), "+", Literal (Numeric 2)) :: [])
-*)
-
-let test_assign_binop = "x = 1 + 2"
-(*
-  Chunk (Assignment (Name "x", Binary (Literal (Numeric 1), "+", Literal (Numeric 2))) :: [])
-*)

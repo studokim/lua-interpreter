@@ -15,6 +15,8 @@ end
 
 module IdentMap = Map.Make (Ident)
 
+let vars = IdentMap.empty
+
 let show_var id lit =
   match id with
   | Name name ->
@@ -82,7 +84,6 @@ let rec execute_ast chunk env =
 
 (*** Tests ***)
 
-let vars = IdentMap.empty
 let var = Name "var"
 let zero = Numeric 0.
 
