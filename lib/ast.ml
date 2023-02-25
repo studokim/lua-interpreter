@@ -14,7 +14,6 @@ type expression =
   | Binop of expression * operator * expression
 
 type statement =
-  | Expression of expression
   | Assignment of identifier * expression
   | Call of identifier * expression list
 

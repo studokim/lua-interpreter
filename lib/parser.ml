@@ -85,8 +85,6 @@ module Expression = struct
 end
 
 module Statement = struct
-  let expression = Expression.binop >>= fun result -> return (Expression result)
-
   let operator =
     peek_char
     >>= function

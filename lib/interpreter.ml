@@ -63,9 +63,6 @@ let rec print args env =
 
 let execute_stmt statement env =
   match statement with
-  | Expression expr ->
-    print [ Literal (execute_expr expr env) ] env;
-    env
   | Call (Name func, args) ->
     (match func with
      | "print" ->
