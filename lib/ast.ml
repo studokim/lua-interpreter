@@ -15,9 +15,12 @@ type expression =
   | Identifier of identifier
   | Literal of literal
   | Binop of expression * operator * expression
+  | CallExpr of identifier * expression list
 
 type statement =
   | Assignment of identifier * expression
-  | Call of identifier * expression list
+  | CallStmt of expression
+  | Definition of identifier * func
 
-type chunk = Chunk of statement list
+and func = identifier list * chunk
+and chunk = Chunk of statement list

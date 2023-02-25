@@ -24,6 +24,8 @@ let whitespace =
 let parens p = char '(' *> whitespace *> p <* whitespace <* char ')'
 
 module Identifier = struct
+  let keywords = [ "function"; "end" ]
+
   let name =
     let is_name c = is_alpha c || is_digit c || c = '_' in
     let first =
@@ -34,7 +36,10 @@ module Identifier = struct
     in
     first
     >>= fun first ->
-    take_while is_name >>= fun rest -> return (Name (Char.escaped first ^ rest))
+    take_while is_name
+    >>= fun rest ->
+    let name = Char.escaped first ^ rest in
+    if List.mem name keywords then fail (name ^ "is a keyword") else return (Name name)
   ;;
 end
 
@@ -76,29 +81,43 @@ module Expression = struct
   let identifier = Identifier.name >>= fun result -> return (Identifier result)
   let literal = Literal.literal >>= fun result -> return (Literal result)
 
-  let binop =
-    let operator =
-      peek_char
-      >>= function
-      | Some '+' -> advance 1 *> return AddOp
-      | Some '-' -> advance 1 *> return SubOp
-      | Some '*' -> advance 1 *> return MulOp
-      | Some '/' -> advance 1 *> return DivOp
-      | _ -> fail "arithmetic operator expected"
-    in
+  let operator =
+    peek_char
+    >>= function
+    | Some '+' -> advance 1 *> return AddOp
+    | Some '-' -> advance 1 *> return SubOp
+    | Some '*' -> advance 1 *> return MulOp
+    | Some '/' -> advance 1 *> return DivOp
+    | _ -> fail "arithmetic operator expected"
+  ;;
+
+  let expression =
     fix (fun expression ->
-      let binop_constructor left op right = Binop (left, op, right) in
       let binop =
+        let binop_constructor left op right = Binop (left, op, right) in
         lift3
           binop_constructor
           (whitespace *> expression <* whitespace)
           operator
           (whitespace *> expression <* whitespace)
       in
-      choice [ identifier; parens identifier; literal; parens literal; parens binop ])
+      let call =
+        let call_constructor id exprs = CallExpr (id, exprs) in
+        lift2
+          call_constructor
+          (Identifier.name <* whitespace)
+          (parens (sep_by (char ',') (whitespace *> expression <* whitespace)))
+      in
+      choice [ call; identifier; literal; parens binop ])
   ;;
+end
 
-  let expression = binop
+module Chunk = struct
+  let chunk statement =
+    let separator = string ";" <|> whitespace in
+    let chunk_constructor stmts = Chunk stmts in
+    lift chunk_constructor (sep_by separator (whitespace *> statement <* whitespace))
+  ;;
 end
 
 module Statement = struct
@@ -116,25 +135,19 @@ module Statement = struct
       (whitespace *> Expression.expression)
   ;;
 
-  let call =
-    let separator = char ',' in
-    let call_constructor id exprs = Call (id, exprs) in
-    lift2
-      call_constructor
-      (Identifier.name <* whitespace)
-      (parens (sep_by separator (whitespace *> Expression.expression <* whitespace)))
-  ;;
+  let call = Expression.expression >>= fun result -> return (CallStmt result)
 
-  let statement = choice [ assignment; call ]
-end
-
-module Chunk = struct
-  let chunk =
-    let separator = string ";" <|> whitespace in
-    let chunk_constructor stmts = Chunk stmts in
-    lift
-      chunk_constructor
-      (sep_by separator (whitespace *> Statement.statement <* whitespace))
+  let statement =
+    fix (fun statement ->
+      let definition =
+        let definition_constructor id args body = Definition (id, (args, body)) in
+        lift3
+          definition_constructor
+          (string "function" *> whitespace *> Identifier.name <* whitespace)
+          (parens (sep_by (char ',') (whitespace *> Identifier.name <* whitespace)))
+          (whitespace *> Chunk.chunk statement <* whitespace <* string "end")
+      in
+      choice [ definition; assignment; call ])
   ;;
 end
 
@@ -147,4 +160,4 @@ let unpack = function
 
 let parse_all parser string = parse_string ~consume:All parser string
 let parse_prefix parser string = parse_string ~consume:Prefix parser string
-let parse string = unpack (parse_all Chunk.chunk string)
+let parse string = unpack (parse_all (Chunk.chunk Statement.statement) string)
