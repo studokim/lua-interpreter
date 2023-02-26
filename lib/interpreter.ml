@@ -16,24 +16,22 @@ module Environment = struct
 
   module IdentifierMap = Map.Make (Identifier)
 
-  type mode =
-    | Debug
-    | Release
-
   type env =
-    { mode : mode
-    ; vars : literal IdentifierMap.t
-    ; funcs : func IdentifierMap.t
+    { vars : literal IdentifierMap.t
+    ; funcs : (args * body) IdentifierMap.t
     }
 
   let string_of_identifier = function
     | Name name -> name
   ;;
 
-  let show_var id = function
-    | Numeric num ->
-      print_string (string_of_identifier id ^ " = " ^ string_of_float num ^ "\n")
-    | String str -> print_string (string_of_identifier id ^ " = \"" ^ str ^ "\"\n")
+  let show_var id value =
+    let name = string_of_identifier id in
+    match value with
+    | Numeric num -> print_string (name ^ " = " ^ string_of_float num ^ "\n")
+    | String str -> print_string (name ^ " = \"" ^ str ^ "\"\n")
+    | Bool b -> print_string (name ^ " = " ^ string_of_bool b ^ "\n")
+    | Nil -> print_string (name ^ " = nil\n")
   ;;
 
   let show_vars vars = IdentifierMap.iter show_var vars
@@ -68,59 +66,51 @@ module Executor = struct
        | Not_found ->
          failwith ("identifier `" ^ string_of_identifier id ^ "` not declared"))
     | Binop (left, op, right) ->
-      let litl = execute_expression left env in
-      let litr = execute_expression right env in
-      (match litl with
-       | Numeric numl ->
-         (match litr with
-          | Numeric numr ->
+      let left = execute_expression left env in
+      let right = execute_expression right env in
+      (match left with
+       | Numeric left ->
+         (match right with
+          | Numeric right ->
             (match op with
-             | AddOp -> Numeric (numl +. numr)
-             | SubOp -> Numeric (numl -. numr)
-             | MulOp -> Numeric (numl *. numr)
-             | DivOp -> Numeric (numl /. numr))
-          | String _ -> failwith "cannot operate with strings")
-       | String _ -> failwith "cannot operate with strings")
-    | CallExpr (id, _) ->
-      (try
-         let _ = IdentifierMap.find id env.funcs in
-         failwith "call not implemented"
-       with
-       | Not_found -> failwith ("function `" ^ string_of_identifier id ^ "` not declared"))
+             | AddOp -> Numeric (left +. right)
+             | SubOp -> Numeric (left -. right)
+             | MulOp -> Numeric (left *. right)
+             | DivOp -> Numeric (left /. right))
+          | _ -> failwith "only operations on numbers are allowed")
+       | _ -> failwith "only operations on numbers are allowed")
+    | Call (id, _) ->
+      (match string_of_identifier id with
+       | "__show_vars" ->
+         show_vars env.vars;
+         Nil
+       | "__show_funcs" ->
+         show_funcs env.funcs;
+         Nil
+       | "__show_env" ->
+         show_env env;
+         Nil
+       | _ ->
+         (try
+            let _ = IdentifierMap.find id env.funcs in
+            failwith ("call of `" ^ string_of_identifier id ^ "` not implemented")
+          with
+          | Not_found ->
+            failwith ("function `" ^ string_of_identifier id ^ "` not declared")))
   ;;
 
   let execute_statement statement env =
     match statement with
+    | Expression expr ->
+      (* i.e. call the function that has side-effects *)
+      let _ = execute_expression expr env in
+      env
     | Assignment (id, expr) ->
-      { mode = env.mode
-      ; vars = IdentifierMap.add id (execute_expression expr env) env.vars
+      { vars = IdentifierMap.add id (execute_expression expr env) env.vars
       ; funcs = env.funcs
       }
-    | CallStmt expr ->
-      (match expr with
-       | CallExpr (id, _) ->
-         (match string_of_identifier id with
-          | "__show_vars" ->
-            show_vars env.vars;
-            env
-          | "__show_funcs" ->
-            show_funcs env.funcs;
-            env
-          | "__show_env" ->
-            show_env env;
-            env
-          | "__release" -> { mode = Release; vars = env.vars; funcs = env.funcs }
-          | "__debug" -> { mode = Debug; vars = env.vars; funcs = env.funcs }
-          | _ ->
-            (try
-               let _ = IdentifierMap.find id env.funcs in
-               failwith ("call of `" ^ string_of_identifier id ^ "` not implemented")
-             with
-             | Not_found ->
-               failwith ("function `" ^ string_of_identifier id ^ "` not declared")))
-       | _ -> failwith "function call expected")
-    | Definition (id, func) ->
-      { mode = env.mode; vars = env.vars; funcs = IdentifierMap.add id func env.funcs }
+    | Definition (id, args, body) ->
+      { vars = env.vars; funcs = IdentifierMap.add id (args, body) env.funcs }
   ;;
 
   let rec execute_chunk chunk env =
@@ -143,12 +133,12 @@ let ast =
     ; Assignment (Name "arg1", Literal zero)
     ; Assignment (Name "arg2", Literal (Numeric 1.))
     ; Assignment (Name "arg2", Binop (Literal (Numeric 2.), AddOp, Literal (Numeric 3.)))
-    ; CallStmt
-        (CallExpr
+    ; Expression
+        (Call
            ( Name "print"
            , [ Identifier (Name "arg2"); Literal (Numeric 19.); Literal zero ] ))
-    ; CallStmt
-        (CallExpr
+    ; Expression
+        (Call
            ( Name "print"
            , [ Identifier var
              ; Binop
@@ -156,6 +146,6 @@ let ast =
                  , MulOp
                  , Literal (Numeric 3.) )
              ] ))
-    ; CallStmt (CallExpr (Name "print", []))
+    ; Expression (Call (Name "print", []))
     ]
 ;;

@@ -24,6 +24,7 @@ let whitespace =
 let parens p = char '(' *> whitespace *> p <* whitespace <* char ')'
 
 module Identifier = struct
+  (* TODO: check if it's necessary *)
   let keywords = [ "function"; "end" ]
 
   let name =
@@ -67,12 +68,19 @@ module Literal = struct
     | _ -> return (Numeric (float_of_string (sign ^ integer)))
   ;;
 
+  (* there could be escaped quotes *)
   let string =
     let is_quote c = c = '"' in
     char '"' *> take_till is_quote <* char '"' >>= fun s -> return (String s)
   ;;
 
-  let literal = choice [ numeric; string ]
+  let bool =
+    Angstrom.string "true" *> return (Bool true)
+    <|> Angstrom.string "false" *> return (Bool false)
+  ;;
+
+  let nil = Angstrom.string "nil" *> return Nil
+  let literal = choice [ numeric; string; bool; nil ]
 end
 
 (*** Combined Parsing ***)
@@ -102,7 +110,7 @@ module Expression = struct
           (whitespace *> expression <* whitespace)
       in
       let call =
-        let call_constructor id exprs = CallExpr (id, exprs) in
+        let call_constructor id params = Call (id, params) in
         lift2
           call_constructor
           (Identifier.name <* whitespace)
@@ -112,15 +120,9 @@ module Expression = struct
   ;;
 end
 
-module Chunk = struct
-  let chunk statement =
-    let separator = string ";" <|> whitespace in
-    let chunk_constructor stmts = Chunk stmts in
-    lift chunk_constructor (sep_by separator (whitespace *> statement <* whitespace))
-  ;;
-end
-
 module Statement = struct
+  let expression = Expression.expression >>= fun result -> return (Expression result)
+
   let assignment =
     let operator =
       peek_char
@@ -135,19 +137,29 @@ module Statement = struct
       (whitespace *> Expression.expression)
   ;;
 
-  let call = Expression.expression >>= fun result -> return (CallStmt result)
-
   let statement =
     fix (fun statement ->
+      let body =
+        let separator = string ";" <|> whitespace in
+        sep_by separator (whitespace *> statement <* whitespace)
+      in
       let definition =
-        let definition_constructor id args body = Definition (id, (args, body)) in
+        let definition_constructor id args body = Definition (id, args, body) in
         lift3
           definition_constructor
           (string "function" *> whitespace *> Identifier.name <* whitespace)
           (parens (sep_by (char ',') (whitespace *> Identifier.name <* whitespace)))
-          (whitespace *> Chunk.chunk statement <* whitespace <* string "end")
+          (whitespace *> body <* whitespace <* string "end")
       in
-      choice [ definition; assignment; call ])
+      choice [ definition; assignment; expression ])
+  ;;
+end
+
+module Chunk = struct
+  let chunk =
+    let separator = string ";" <|> whitespace in
+    sep_by separator (whitespace *> Statement.statement <* whitespace)
+    >>= fun result -> return (Chunk result)
   ;;
 end
 
@@ -160,4 +172,4 @@ let unpack = function
 
 let parse_all parser string = parse_string ~consume:All parser string
 let parse_prefix parser string = parse_string ~consume:Prefix parser string
-let parse string = unpack (parse_all (Chunk.chunk Statement.statement) string)
+let parse string = unpack (parse_all Chunk.chunk string)

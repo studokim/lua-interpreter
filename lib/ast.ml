@@ -4,6 +4,8 @@ type identifier = Name of string
 type literal =
   | Numeric of float
   | String of string
+  | Bool of bool
+  | Nil
 
 type operator =
   | AddOp
@@ -15,12 +17,16 @@ type expression =
   | Identifier of identifier
   | Literal of literal
   | Binop of expression * operator * expression
-  | CallExpr of identifier * expression list
+  | Call of identifier * params
+
+and params = expression list
 
 type statement =
+  | Expression of expression
   | Assignment of identifier * expression
-  | CallStmt of expression
-  | Definition of identifier * func
+  | Definition of identifier * args * body
 
-and func = identifier list * chunk
-and chunk = Chunk of statement list
+and args = identifier list
+and body = statement list
+
+type chunk = Chunk of statement list
