@@ -25,6 +25,23 @@ module Environment = struct
     | Name name -> name
   ;;
 
+  type id_type =
+    | Variable
+    | Function
+    | Not_declared
+
+  let id_type id env =
+    let is_var = IdentifierMap.mem id env.vars in
+    let is_func = IdentifierMap.mem id env.funcs in
+    if is_var && is_func
+    then failwith ("ambigous identifier `" ^ string_of_identifier id ^ "`\n")
+    else if is_var
+    then Variable
+    else if is_func
+    then Function
+    else Not_declared
+  ;;
+
   let show_var id value =
     let name = string_of_identifier id in
     match value with
@@ -60,36 +77,38 @@ module Executor = struct
 
   let rec execute_expression expression env =
     match expression with
-    | Literal lit -> lit
+    | Literal lit -> Literal lit
     | Identifier id ->
-      (try IdentifierMap.find id env.vars with
-       | Not_found ->
-         failwith ("identifier `" ^ string_of_identifier id ^ "` not declared"))
+      (match id_type id env with
+       | Variable -> Literal (IdentifierMap.find id env.vars)
+       | Function -> Identifier id
+       | Not_declared ->
+         failwith ("identifier `" ^ string_of_identifier id ^ "` not declared\n"))
     | Binop (left, op, right) ->
       let left = execute_expression left env in
       let right = execute_expression right env in
       (match left with
-       | Numeric left ->
+       | Literal (Numeric left) ->
          (match right with
-          | Numeric right ->
+          | Literal (Numeric right) ->
             (match op with
-             | AddOp -> Numeric (left +. right)
-             | SubOp -> Numeric (left -. right)
-             | MulOp -> Numeric (left *. right)
-             | DivOp -> Numeric (left /. right))
+             | AddOp -> Literal (Numeric (left +. right))
+             | SubOp -> Literal (Numeric (left -. right))
+             | MulOp -> Literal (Numeric (left *. right))
+             | DivOp -> Literal (Numeric (left /. right)))
           | _ -> failwith "only operations on numbers are allowed")
        | _ -> failwith "only operations on numbers are allowed")
     | Call (id, _) ->
       (match string_of_identifier id with
        | "__show_vars" ->
          show_vars env.vars;
-         Nil
+         Literal Nil
        | "__show_funcs" ->
          show_funcs env.funcs;
-         Nil
+         Literal Nil
        | "__show_env" ->
          show_env env;
-         Nil
+         Literal Nil
        | _ ->
          (try
             let _ = IdentifierMap.find id env.funcs in
@@ -106,9 +125,33 @@ module Executor = struct
       let _ = execute_expression expr env in
       env
     | Assignment (id, expr) ->
-      { vars = IdentifierMap.add id (execute_expression expr env) env.vars
-      ; funcs = env.funcs
-      }
+      let expr = execute_expression expr env in
+      (*
+         var       = func -> remove; add
+         func|none = func -> none;   add
+         var|none  = var  -> add;    none
+         func      = var  -> add;    remove
+         *)
+      (match expr with
+       (* execute_expression guarantees that if expr is Identifier, it is a Function *)
+       | Identifier func ->
+         let definition = IdentifierMap.find func env.funcs in
+         (match id_type id env with
+          | Variable ->
+            { vars = IdentifierMap.remove id env.vars
+            ; funcs = IdentifierMap.add id definition env.funcs
+            }
+          | Function | Not_declared ->
+            { vars = env.vars; funcs = IdentifierMap.add id definition env.funcs })
+       | Literal lit ->
+         (match id_type id env with
+          | Variable | Not_declared ->
+            { vars = IdentifierMap.add id lit env.vars; funcs = env.funcs }
+          | Function ->
+            { vars = IdentifierMap.add id lit env.vars
+            ; funcs = IdentifierMap.remove id env.funcs
+            })
+       | _ -> failwith "couldn't execute the right-hand expression")
     | Definition (id, args, body) ->
       { vars = env.vars; funcs = IdentifierMap.add id (args, body) env.funcs }
   ;;
