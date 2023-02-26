@@ -82,6 +82,28 @@ module Executor = struct
     List.map2 introduce_one args params
   ;;
 
+  let is_builtin_func id =
+    match string_of_identifier id with
+    | "__show_vars" -> true
+    | "__show_funcs" -> true
+    | "__show_env" -> true
+    | _ -> false
+  ;;
+
+  let call_builtin_func id env =
+    match string_of_identifier id with
+    | "__show_vars" ->
+      show_vars env.vars;
+      Literal Nil
+    | "__show_funcs" ->
+      show_funcs env.funcs;
+      Literal Nil
+    | "__show_env" ->
+      show_env env;
+      Literal Nil
+    | _ -> failwith "not a builtin function"
+  ;;
+
   let rec execute_expression expression env =
     match expression with
     | Literal lit -> Literal lit
@@ -106,25 +128,16 @@ module Executor = struct
           | _ -> failwith "only operations on numbers are allowed")
        | _ -> failwith "only operations on numbers are allowed")
     | Call (id, params) ->
-      (match string_of_identifier id with
-       | "__show_vars" ->
-         show_vars env.vars;
-         Literal Nil
-       | "__show_funcs" ->
-         show_funcs env.funcs;
-         Literal Nil
-       | "__show_env" ->
-         show_env env;
-         Literal Nil
-       | _ ->
-         (try
-            let args, body = IdentifierMap.find id env.funcs in
-            let chunk = Chunk (introduce_params args params @ body) in
-            let _ = execute_chunk chunk env in
-            Literal Nil
-          with
-          | Not_found ->
-            failwith ("function `" ^ string_of_identifier id ^ "` not declared")))
+      if is_builtin_func id
+      then call_builtin_func id env
+      else (
+        try
+          let args, body = IdentifierMap.find id env.funcs in
+          let chunk = Chunk (introduce_params args params @ body) in
+          let _ = execute_chunk chunk env in
+          Literal Nil
+        with
+        | Not_found -> failwith ("function `" ^ string_of_identifier id ^ "` not declared"))
 
   and execute_statement statement env =
     match statement with
@@ -161,7 +174,10 @@ module Executor = struct
             })
        | _ -> failwith "couldn't execute the right-hand expression")
     | Definition (id, args, body) ->
-      { vars = env.vars; funcs = IdentifierMap.add id (args, body) env.funcs }
+      if is_builtin_func id
+      then failwith ("`" ^ string_of_identifier id ^ "` is a builtin function")
+      else { vars = env.vars; funcs = IdentifierMap.add id (args, body) env.funcs }
+    | Return _ -> failwith "return not implemented"
 
   and execute_chunk chunk env =
     match chunk with
@@ -172,10 +188,9 @@ end
 
 (*** Tests ***)
 
-let var = Name "var"
-let zero = Numeric 0.
-
 let ast =
+  let var = Name "var" in
+  let zero = Numeric 0. in
   Chunk
     [ Assignment (var, Literal zero)
     ; Assignment (var, Literal (Numeric 10.))
