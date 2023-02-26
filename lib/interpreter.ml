@@ -180,7 +180,7 @@ module Executor = struct
             { vars = IdentifierMap.add id lit env.vars
             ; funcs = IdentifierMap.remove id env.funcs
             })
-       | _ -> failwith "couldn't execute the right-hand expression")
+       | _ -> failwith "couldn't execute the right-hand expression in assignment")
     | Definition (id, args, body) ->
       if is_builtin_func id
       then failwith ("`" ^ string_of_identifier id ^ "` is a builtin function")
