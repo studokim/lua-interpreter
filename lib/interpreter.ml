@@ -75,6 +75,13 @@ end
 module Executor = struct
   open Environment
 
+  let introduce_params (args : args) (params : params) : statement list =
+    let introduce_one (arg : identifier) (param : expression) : statement =
+      Assignment (arg, param)
+    in
+    List.map2 introduce_one args params
+  ;;
+
   let rec execute_expression expression env =
     match expression with
     | Literal lit -> Literal lit
@@ -98,7 +105,7 @@ module Executor = struct
              | DivOp -> Literal (Numeric (left /. right)))
           | _ -> failwith "only operations on numbers are allowed")
        | _ -> failwith "only operations on numbers are allowed")
-    | Call (id, _) ->
+    | Call (id, params) ->
       (match string_of_identifier id with
        | "__show_vars" ->
          show_vars env.vars;
@@ -111,14 +118,15 @@ module Executor = struct
          Literal Nil
        | _ ->
          (try
-            let _ = IdentifierMap.find id env.funcs in
-            failwith ("call of `" ^ string_of_identifier id ^ "` not implemented")
+            let args, body = IdentifierMap.find id env.funcs in
+            let chunk = Chunk (introduce_params args params @ body) in
+            let _ = execute_chunk chunk env in
+            Literal Nil
           with
           | Not_found ->
             failwith ("function `" ^ string_of_identifier id ^ "` not declared")))
-  ;;
 
-  let execute_statement statement env =
+  and execute_statement statement env =
     match statement with
     | Expression expr ->
       (* i.e. call the function that has side-effects *)
@@ -154,9 +162,8 @@ module Executor = struct
        | _ -> failwith "couldn't execute the right-hand expression")
     | Definition (id, args, body) ->
       { vars = env.vars; funcs = IdentifierMap.add id (args, body) env.funcs }
-  ;;
 
-  let rec execute_chunk chunk env =
+  and execute_chunk chunk env =
     match chunk with
     | Chunk [] -> env
     | Chunk (head :: tail) -> execute_statement head env |> execute_chunk (Chunk tail)
