@@ -13,15 +13,27 @@ let is_alpha c =
   || (code >= Char.code 'a' && code <= Char.code 'z')
 ;;
 
-let whitespace =
-  let is_whitespace = function
-    | ' ' | '\t' | '\r' | '\n' -> true
-    | _ -> false
+let ignored =
+  let whitespace =
+    let is_whitespace = function
+      | ' ' | '\t' | '\r' | '\n' -> true
+      | _ -> false
+    in
+    take_while is_whitespace
   in
-  take_while is_whitespace
+  let comment =
+    let start = string "--" *> whitespace *> string "[[" in
+    let finish = string "--" *> whitespace *> string "]]" in
+    let content =
+      fix (fun content ->
+        take_till (fun c -> c = '-') <* (finish <|> advance 1 *> content))
+    in
+    start *> content
+  in
+  choice [ comment; whitespace ]
 ;;
 
-let parens p = char '(' *> whitespace *> p <* whitespace <* char ')'
+let parens p = char '(' *> ignored *> p <* ignored <* char ')'
 
 module Identifier = struct
   let keywords = [ "function"; "end"; "return" ]
@@ -104,16 +116,16 @@ module Expression = struct
         let binop_constructor left op right = Binop (left, op, right) in
         lift3
           binop_constructor
-          (whitespace *> expression <* whitespace)
+          (ignored *> expression <* ignored)
           operator
-          (whitespace *> expression <* whitespace)
+          (ignored *> expression <* ignored)
       in
       let call =
         let call_constructor id params = Call (id, params) in
         lift2
           call_constructor
-          (Identifier.name <* whitespace)
-          (parens (sep_by (char ',') (whitespace *> expression <* whitespace)))
+          (Identifier.name <* ignored)
+          (parens (sep_by (char ',') (ignored *> expression <* ignored)))
       in
       choice [ call; identifier; literal; parens binop ])
   ;;
@@ -132,26 +144,26 @@ module Statement = struct
     let assignment_constructor id expr = Assignment (id, expr) in
     lift2
       assignment_constructor
-      (Identifier.name <* whitespace <* operator)
-      (whitespace *> Expression.expression)
+      (Identifier.name <* ignored <* operator)
+      (ignored *> Expression.expression)
   ;;
 
   let statement =
     fix (fun statement ->
       let body =
-        let separator = string ";" <|> whitespace in
-        sep_by separator (whitespace *> statement <* whitespace)
+        let separator = string ";" <|> ignored in
+        sep_by separator (ignored *> statement <* ignored)
       in
       let definition =
         let definition_constructor id args body = Definition (id, args, body) in
         lift3
           definition_constructor
-          (string "function" *> whitespace *> Identifier.name <* whitespace)
-          (parens (sep_by (char ',') (whitespace *> Identifier.name <* whitespace)))
-          (whitespace *> body <* whitespace <* string "end")
+          (string "function" *> ignored *> Identifier.name <* ignored)
+          (parens (sep_by (char ',') (ignored *> Identifier.name <* ignored)))
+          (ignored *> body <* ignored <* string "end")
       in
       let return =
-        string "return" *> whitespace *> (Expression.expression <|> return (Literal Nil))
+        string "return" *> ignored *> (Expression.expression <|> return (Literal Nil))
         >>= fun result -> return (Return result)
       in
       choice [ definition; return; assignment; expression ])
@@ -160,9 +172,12 @@ end
 
 module Chunk = struct
   let chunk =
-    let separator = string ";" <|> whitespace in
-    sep_by separator (whitespace *> Statement.statement <* whitespace)
-    >>= fun result -> return (Chunk result)
+    let statement_list =
+      let separator = ignored *> string ";" <* ignored <|> ignored in
+      sep_by separator Statement.statement >>= fun result -> return (Chunk result)
+    in
+    let empty_list = ignored >>= fun _ -> return (Chunk []) in
+    ignored *> (statement_list <|> empty_list) <* ignored
   ;;
 end
 
