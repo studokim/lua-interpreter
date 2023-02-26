@@ -19,7 +19,7 @@ let env = { vars = IdentifierMap.empty; funcs = IdentifierMap.empty }
 let rec iterate env =
   try
     let input = read_input () in
-    let env_updated = execute input env in
+    let _, env_updated = execute input env in
     iterate env_updated
   with
   | End_of_file -> exit 0

@@ -24,8 +24,7 @@ let whitespace =
 let parens p = char '(' *> whitespace *> p <* whitespace <* char ')'
 
 module Identifier = struct
-  (* TODO: check if it's necessary *)
-  let keywords = [ "function"; "end" ]
+  let keywords = [ "function"; "end"; "return" ]
 
   let name =
     let is_name c = is_alpha c || is_digit c || c = '_' in
@@ -151,7 +150,11 @@ module Statement = struct
           (parens (sep_by (char ',') (whitespace *> Identifier.name <* whitespace)))
           (whitespace *> body <* whitespace <* string "end")
       in
-      choice [ definition; assignment; expression ])
+      let return =
+        string "return" *> whitespace *> (Expression.expression <|> return (Literal Nil))
+        >>= fun result -> return (Return result)
+      in
+      choice [ definition; return; assignment; expression ])
   ;;
 end
 

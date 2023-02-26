@@ -25,6 +25,7 @@ type statement =
   | Expression of expression
   | Assignment of identifier * expression
   | Definition of identifier * args * body
+  | Return of expression
 
 and args = identifier list
 and body = statement list

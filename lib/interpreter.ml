@@ -79,7 +79,14 @@ module Executor = struct
     let introduce_one (arg : identifier) (param : expression) : statement =
       Assignment (arg, param)
     in
-    List.map2 introduce_one args params
+    try List.map2 introduce_one args params with
+    | Invalid_argument _ ->
+      failwith
+        ("expected "
+        ^ string_of_int (List.length args)
+        ^ " parameters, "
+        ^ string_of_int (List.length params)
+        ^ " given")
   ;;
 
   let is_builtin_func id =
@@ -134,8 +141,9 @@ module Executor = struct
         try
           let args, body = IdentifierMap.find id env.funcs in
           let chunk = Chunk (introduce_params args params @ body) in
-          let _ = execute_chunk chunk env in
-          Literal Nil
+          (* function call cannot modify env, because all new vars and funcs are local *)
+          let expr, _ = execute_chunk chunk env in
+          expr
         with
         | Not_found -> failwith ("function `" ^ string_of_identifier id ^ "` not declared"))
 
@@ -177,12 +185,15 @@ module Executor = struct
       if is_builtin_func id
       then failwith ("`" ^ string_of_identifier id ^ "` is a builtin function")
       else { vars = env.vars; funcs = IdentifierMap.add id (args, body) env.funcs }
-    | Return _ -> failwith "return not implemented"
+    | Return _ -> failwith "should've returned in `execute_chunk`"
 
   and execute_chunk chunk env =
     match chunk with
-    | Chunk [] -> env
-    | Chunk (head :: tail) -> execute_statement head env |> execute_chunk (Chunk tail)
+    | Chunk [] -> Literal Nil, env
+    | Chunk (head :: tail) ->
+      (match head with
+       | Return expr -> expr, env
+       | _ -> execute_statement head env |> execute_chunk (Chunk tail))
   ;;
 end
 
