@@ -161,26 +161,30 @@ module Executor = struct
          var|none  = var  -> add;    none
          func      = var  -> add;    remove
          *)
-      (match expr with
-       (* execute_expression guarantees that if expr is Identifier, it is a Function *)
-       | Identifier func ->
-         let definition = IdentifierMap.find func env.funcs in
-         (match id_type id env with
-          | Variable ->
-            { vars = IdentifierMap.remove id env.vars
-            ; funcs = IdentifierMap.add id definition env.funcs
-            }
-          | Function | Not_declared ->
-            { vars = env.vars; funcs = IdentifierMap.add id definition env.funcs })
-       | Literal lit ->
-         (match id_type id env with
-          | Variable | Not_declared ->
-            { vars = IdentifierMap.add id lit env.vars; funcs = env.funcs }
-          | Function ->
-            { vars = IdentifierMap.add id lit env.vars
-            ; funcs = IdentifierMap.remove id env.funcs
-            })
-       | _ -> failwith "couldn't execute the right-hand expression in assignment")
+      (try
+         match expr with
+         (* execute_expression guarantees that if expr is Identifier, it is a Function *)
+         | Identifier func ->
+           let definition = IdentifierMap.find func env.funcs in
+           (match id_type id env with
+            | Variable ->
+              { vars = IdentifierMap.remove id env.vars
+              ; funcs = IdentifierMap.add id definition env.funcs
+              }
+            | Function | Not_declared ->
+              { vars = env.vars; funcs = IdentifierMap.add id definition env.funcs })
+         | Literal lit ->
+           (match id_type id env with
+            | Variable | Not_declared ->
+              { vars = IdentifierMap.add id lit env.vars; funcs = env.funcs }
+            | Function ->
+              { vars = IdentifierMap.add id lit env.vars
+              ; funcs = IdentifierMap.remove id env.funcs
+              })
+         | _ -> failwith "couldn't execute the right-hand expression in assignment"
+       with
+       | Not_found ->
+         failwith "the identifier was declared in inner scope and is not available")
     | Definition (id, args, body) ->
       if is_builtin_func id
       then failwith ("`" ^ string_of_identifier id ^ "` is a builtin function")
