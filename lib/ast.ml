@@ -12,6 +12,9 @@ type operator =
   | SubOp
   | MulOp
   | DivOp
+  | EqualsOp
+  | AndOp
+  | OrOp
 
 type expression =
   | Identifier of identifier

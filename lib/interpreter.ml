@@ -132,17 +132,25 @@ module Executor = struct
     | Binop (left, op, right) ->
       let left, env = execute_expression left env in
       let right, env = execute_expression right env in
-      (match left with
-       | Literal (Numeric left) ->
-         (match right with
-          | Literal (Numeric right) ->
+      (match op with
+       | AddOp | SubOp | MulOp | DivOp ->
+         (match left, right with
+          | Literal (Numeric left), Literal (Numeric right) ->
             (match op with
              | AddOp -> Literal (Numeric (left +. right)), env
              | SubOp -> Literal (Numeric (left -. right)), env
              | MulOp -> Literal (Numeric (left *. right)), env
-             | DivOp -> Literal (Numeric (left /. right)), env)
+             | DivOp -> Literal (Numeric (left /. right)), env
+             | _ -> failwith "`op` should've been arithmetic here")
           | _ -> failwith "only operations on numbers are allowed")
-       | _ -> failwith "only operations on numbers are allowed")
+       | EqualsOp -> Literal (Bool (left = right)), env
+       | AndOp | OrOp ->
+         let left, env = test left env in
+         let right, env = test right env in
+         (match op with
+          | AndOp -> Literal (Bool (left && right)), env
+          | OrOp -> Literal (Bool (left || right)), env
+          | _ -> failwith "`op` should've been `and` or `or` here"))
     | Call (id, params) ->
       if is_builtin_func id
       then call_builtin_func id env
@@ -154,6 +162,15 @@ module Executor = struct
         match id_type returned env with
         | Variable -> Literal (find_var returned env), env
         | Function -> Identifier returned, env)
+
+  and test condition env =
+    let condition, env = execute_expression condition env in
+    match condition with
+    | Identifier id -> IdentifierMap.mem id env.funcs, env
+    | Literal (Bool lit) -> lit, env
+    | Literal Nil -> false, env
+    | Literal _ -> true, env
+    | _ -> failwith "the condition should've folded to Literal or function Identifier"
 
   and execute_statement statement env =
     match statement with
@@ -190,15 +207,8 @@ module Executor = struct
          failwith
            "the right-hand expression should've folded to Literal or function Identifier")
     | Branch (condition, thenpart, elsepart) ->
-      let test = function
-        | Identifier id -> IdentifierMap.mem id env.funcs
-        | Literal (Bool lit) -> lit
-        | Literal Nil -> false
-        | Literal _ -> true
-        | _ -> failwith "the condition should've folded to Literal or function Identifier"
-      in
-      let condition, env = execute_expression condition env in
-      if test condition
+      let condition, env = test condition env in
+      if condition
       then execute_chunk (Chunk thenpart) env
       else execute_chunk (Chunk elsepart) env
     | Definition (id, args, body) ->

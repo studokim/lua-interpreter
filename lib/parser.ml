@@ -24,7 +24,7 @@ let whitespace =
 let parens p = char '(' *> whitespace *> p <* whitespace <* char ')'
 
 module Identifier = struct
-  let keywords = [ "function"; "end"; "return"; "if"; "then"; "else" ]
+  let keywords = [ "function"; "end"; "return"; "if"; "then"; "else"; "and"; "or" ]
 
   let name =
     let is_name c = is_alpha c || is_digit c || c = '_' in
@@ -89,13 +89,16 @@ module Expression = struct
   let literal = Literal.literal >>= fun result -> return (Literal result)
 
   let operator =
-    peek_char
-    >>= function
-    | Some '+' -> advance 1 *> return AddOp
-    | Some '-' -> advance 1 *> return SubOp
-    | Some '*' -> advance 1 *> return MulOp
-    | Some '/' -> advance 1 *> return DivOp
-    | _ -> fail "arithmetic operator expected"
+    choice
+      [ string "+" *> return AddOp
+      ; string "-" *> return SubOp
+      ; string "*" *> return MulOp
+      ; string "/" *> return DivOp
+      ; string "==" *> return EqualsOp
+      ; string "and" *> return AndOp
+      ; string "or" *> return OrOp
+      ; fail "arithmetic or logical operator expected"
+      ]
   ;;
 
   let expression =
@@ -133,12 +136,7 @@ module Statement = struct
   let expression = Expression.expression >>= fun result -> return (Expression result)
 
   let assignment =
-    let operator =
-      peek_char
-      >>= function
-      | Some '=' -> advance 1
-      | _ -> fail "assignment operator expected"
-    in
+    let operator = string "=" <|> fail "assignment operator expected" in
     let assignment_constructor id expr = Assignment (id, expr) in
     lift2
       assignment_constructor
