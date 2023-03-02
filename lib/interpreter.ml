@@ -34,7 +34,7 @@ module Environment = struct
     let is_var = IdentifierMap.mem id env.vars in
     let is_func = IdentifierMap.mem id env.funcs in
     if is_var && is_func
-    then failwith ("ambigous identifier `" ^ string_of_identifier id ^ "`\n")
+    then failwith ("ambigous identifier `" ^ string_of_identifier id ^ "`")
     else if is_var
     then Variable
     else if is_func
@@ -44,12 +44,12 @@ module Environment = struct
 
   let find_var id env =
     try IdentifierMap.find id env.vars with
-    | Not_found -> failwith ("variable `" ^ string_of_identifier id ^ "` not declared\n")
+    | Not_found -> failwith ("variable `" ^ string_of_identifier id ^ "` not declared")
   ;;
 
   let find_func id env =
     try IdentifierMap.find id env.funcs with
-    | Not_found -> failwith ("function `" ^ string_of_identifier id ^ "` not declared\n")
+    | Not_found -> failwith ("function `" ^ string_of_identifier id ^ "` not declared")
   ;;
 
   let show_var id value =
@@ -129,7 +129,7 @@ module Executor = struct
        | Variable -> Literal (find_var id env)
        | Function -> Identifier id
        | Not_declared ->
-         failwith ("identifier `" ^ string_of_identifier id ^ "` not declared\n"))
+         failwith ("identifier `" ^ string_of_identifier id ^ "` not declared"))
     | Binop (left, op, right) ->
       let left = execute_expression left env in
       let right = execute_expression right env in
