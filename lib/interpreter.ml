@@ -28,23 +28,34 @@ module Environment = struct
   type id_type =
     | Variable
     | Function
-    | Not_declared
 
   let id_type id env =
     let is_var = IdentifierMap.mem id env.vars in
     let is_func = IdentifierMap.mem id env.funcs in
     if is_var && is_func
     then failwith ("ambigous identifier `" ^ string_of_identifier id ^ "`")
-    else if is_var
-    then Variable
     else if is_func
     then Function
-    else Not_declared
+    else Variable
+  ;;
+
+  let returned = Name "#returned"
+
+  let return_var lit env =
+    { vars = IdentifierMap.add returned lit env.vars
+    ; funcs = IdentifierMap.remove returned env.funcs
+    }
+  ;;
+
+  let return_func (args, body) env =
+    { vars = IdentifierMap.remove returned env.vars
+    ; funcs = IdentifierMap.add returned (args, body) env.funcs
+    }
   ;;
 
   let find_var id env =
     try IdentifierMap.find id env.vars with
-    | Not_found -> failwith ("variable `" ^ string_of_identifier id ^ "` not declared")
+    | Not_found -> Nil
   ;;
 
   let find_func id env =
@@ -61,8 +72,6 @@ module Environment = struct
     | Nil -> print_string (name ^ " = nil\n")
   ;;
 
-  let show_vars vars = IdentifierMap.iter show_var vars
-
   let show_func id = function
     | args, _ ->
       print_string
@@ -72,11 +81,11 @@ module Environment = struct
         ^ ")\n")
   ;;
 
-  let show_funcs funcs = IdentifierMap.iter show_func funcs
-
   let show_env env =
-    show_vars env.vars;
-    show_funcs env.funcs
+    print_string "-----\n";
+    IdentifierMap.iter show_var env.vars;
+    IdentifierMap.iter show_func env.funcs;
+    print_string "-----\n"
   ;;
 end
 
@@ -101,47 +110,37 @@ module Executor = struct
 
   let is_builtin_func id =
     match string_of_identifier id with
-    | "__show_vars" -> true
-    | "__show_funcs" -> true
     | "__show_env" -> true
     | _ -> false
   ;;
 
   let call_builtin_func id env =
     match string_of_identifier id with
-    | "__show_vars" ->
-      show_vars env.vars;
-      Literal Nil
-    | "__show_funcs" ->
-      show_funcs env.funcs;
-      Literal Nil
     | "__show_env" ->
       show_env env;
-      Literal Nil
+      Literal Nil, env
     | _ -> failwith "not a builtin function"
   ;;
 
   let rec execute_expression expression env =
     match expression with
-    | Literal lit -> Literal lit
+    | Literal lit -> Literal lit, env
     | Identifier id ->
       (match id_type id env with
-       | Variable -> Literal (find_var id env)
-       | Function -> Identifier id
-       | Not_declared ->
-         failwith ("identifier `" ^ string_of_identifier id ^ "` not declared"))
+       | Variable -> Literal (find_var id env), env
+       | Function -> Identifier id, env)
     | Binop (left, op, right) ->
-      let left = execute_expression left env in
-      let right = execute_expression right env in
+      let left, env = execute_expression left env in
+      let right, env = execute_expression right env in
       (match left with
        | Literal (Numeric left) ->
          (match right with
           | Literal (Numeric right) ->
             (match op with
-             | AddOp -> Literal (Numeric (left +. right))
-             | SubOp -> Literal (Numeric (left -. right))
-             | MulOp -> Literal (Numeric (left *. right))
-             | DivOp -> Literal (Numeric (left /. right)))
+             | AddOp -> Literal (Numeric (left +. right)), env
+             | SubOp -> Literal (Numeric (left -. right)), env
+             | MulOp -> Literal (Numeric (left *. right)), env
+             | DivOp -> Literal (Numeric (left /. right)), env)
           | _ -> failwith "only operations on numbers are allowed")
        | _ -> failwith "only operations on numbers are allowed")
     | Call (id, params) ->
@@ -150,9 +149,11 @@ module Executor = struct
       else (
         let args, body = find_func id env in
         let chunk = Chunk (introduce_params args params @ body) in
-        (* TODO: function call can modify env on Return *)
-        let expr, _ = execute_chunk chunk env in
-        expr)
+        (* function call can modify env if it declares new variables or functions *)
+        let env = execute_chunk chunk env in
+        match id_type returned env with
+        | Variable -> Literal (find_var returned env), env
+        | Function -> Identifier returned, env)
 
   and execute_statement statement env =
     match statement with
@@ -162,45 +163,51 @@ module Executor = struct
       let _ = execute_expression expr env in
       env
     | Assignment (id, expr) ->
-      let expr = execute_expression expr env in
-      (* var       = func -> remove; add
-         func|none = func -> none;   add
-         var|none  = var  -> add;    none
-         func      = var  -> add;    remove
+      (* var  = func -> remove; add
+         func = func -> none;   add
+         var  = var  -> add;    none
+         func = var  -> add;    remove
          *)
-      (match expr with
+      (match execute_expression expr env with
+       | Literal lit, env ->
+         (match id_type id env with
+          | Variable -> { vars = IdentifierMap.add id lit env.vars; funcs = env.funcs }
+          | Function ->
+            { vars = IdentifierMap.add id lit env.vars
+            ; funcs = IdentifierMap.remove id env.funcs
+            })
        (* execute_expression guarantees that if expr is Identifier, it is a Function *)
-       | Identifier func ->
+       | Identifier func, env ->
          let definition = find_func func env in
          (match id_type id env with
           | Variable ->
             { vars = IdentifierMap.remove id env.vars
             ; funcs = IdentifierMap.add id definition env.funcs
             }
-          | Function | Not_declared ->
-            { vars = env.vars; funcs = IdentifierMap.add id definition env.funcs })
-       | Literal lit ->
-         (match id_type id env with
-          | Variable | Not_declared ->
-            { vars = IdentifierMap.add id lit env.vars; funcs = env.funcs }
           | Function ->
-            { vars = IdentifierMap.add id lit env.vars
-            ; funcs = IdentifierMap.remove id env.funcs
-            })
+            { vars = env.vars; funcs = IdentifierMap.add id definition env.funcs })
        | _ ->
-         failwith "the right-hand expression should've folded to Identifier or Literal")
+         failwith
+           "the right-hand expression should've folded to Literal or function Identifier")
     | Definition (id, args, body) ->
       if is_builtin_func id
       then failwith ("`" ^ string_of_identifier id ^ "` is a builtin function")
       else { vars = env.vars; funcs = IdentifierMap.add id (args, body) env.funcs }
-    | Return _ -> failwith "should've returned in `execute_chunk`"
+    | Return expr ->
+      (* Literal or function Identifier *)
+      (match execute_expression expr env with
+       | Literal lit, env -> return_var lit env
+       | Identifier func, env -> return_func (find_func func env) env
+       | _ ->
+         failwith
+           "the return expression should've folded to Literal or function Identifier")
 
-  and execute_chunk chunk env =
+  and execute_chunk chunk env : env =
     match chunk with
-    | Chunk [] -> Literal Nil, env
+    | Chunk [] -> env
     | Chunk (head :: tail) ->
       (match head with
-       | Return expr -> expr, env
+       | Return _ -> execute_statement head env
        | _ -> execute_statement head env |> execute_chunk (Chunk tail))
   ;;
 end
