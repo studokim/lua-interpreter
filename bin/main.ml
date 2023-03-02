@@ -1,7 +1,5 @@
 open Lua
 
-let () = print_endline "Hello from Lua!"
-
 let interpret_file filepath =
   let program = Util.read_file filepath in
   let _ = Repl.execute program Repl.env in
@@ -15,5 +13,7 @@ let () =
     if Sys.file_exists file_path
     then interpret_file file_path
     else failwith "file doesn't exist")
-  else Repl.iterate Repl.env
+  else (
+    print_endline "Hello from Lua!";
+    Repl.iterate Repl.env)
 ;;
