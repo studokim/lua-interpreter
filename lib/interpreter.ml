@@ -42,6 +42,16 @@ module Environment = struct
     else Not_declared
   ;;
 
+  let find_var id env =
+    try IdentifierMap.find id env.vars with
+    | Not_found -> failwith ("variable `" ^ string_of_identifier id ^ "` not declared\n")
+  ;;
+
+  let find_func id env =
+    try IdentifierMap.find id env.funcs with
+    | Not_found -> failwith ("function `" ^ string_of_identifier id ^ "` not declared\n")
+  ;;
+
   let show_var id value =
     let name = string_of_identifier id in
     match value with
@@ -116,7 +126,7 @@ module Executor = struct
     | Literal lit -> Literal lit
     | Identifier id ->
       (match id_type id env with
-       | Variable -> Literal (IdentifierMap.find id env.vars)
+       | Variable -> Literal (find_var id env)
        | Function -> Identifier id
        | Not_declared ->
          failwith ("identifier `" ^ string_of_identifier id ^ "` not declared\n"))
@@ -138,14 +148,11 @@ module Executor = struct
       if is_builtin_func id
       then call_builtin_func id env
       else (
-        try
-          let args, body = IdentifierMap.find id env.funcs in
-          let chunk = Chunk (introduce_params args params @ body) in
-          (* function call cannot modify env, because all new vars and funcs are local *)
-          let expr, _ = execute_chunk chunk env in
-          expr
-        with
-        | Not_found -> failwith ("function `" ^ string_of_identifier id ^ "` not declared"))
+        let args, body = find_func id env in
+        let chunk = Chunk (introduce_params args params @ body) in
+        (* TODO: function call can modify env on Return *)
+        let expr, _ = execute_chunk chunk env in
+        expr)
 
   and execute_statement statement env =
     match statement with
@@ -156,36 +163,32 @@ module Executor = struct
       env
     | Assignment (id, expr) ->
       let expr = execute_expression expr env in
-      (*
-         var       = func -> remove; add
+      (* var       = func -> remove; add
          func|none = func -> none;   add
          var|none  = var  -> add;    none
          func      = var  -> add;    remove
          *)
-      (try
-         match expr with
-         (* execute_expression guarantees that if expr is Identifier, it is a Function *)
-         | Identifier func ->
-           let definition = IdentifierMap.find func env.funcs in
-           (match id_type id env with
-            | Variable ->
-              { vars = IdentifierMap.remove id env.vars
-              ; funcs = IdentifierMap.add id definition env.funcs
-              }
-            | Function | Not_declared ->
-              { vars = env.vars; funcs = IdentifierMap.add id definition env.funcs })
-         | Literal lit ->
-           (match id_type id env with
-            | Variable | Not_declared ->
-              { vars = IdentifierMap.add id lit env.vars; funcs = env.funcs }
-            | Function ->
-              { vars = IdentifierMap.add id lit env.vars
-              ; funcs = IdentifierMap.remove id env.funcs
-              })
-         | _ -> failwith "couldn't execute the right-hand expression in assignment"
-       with
-       | Not_found ->
-         failwith "the identifier was declared in inner scope and is not available")
+      (match expr with
+       (* execute_expression guarantees that if expr is Identifier, it is a Function *)
+       | Identifier func ->
+         let definition = find_func func env in
+         (match id_type id env with
+          | Variable ->
+            { vars = IdentifierMap.remove id env.vars
+            ; funcs = IdentifierMap.add id definition env.funcs
+            }
+          | Function | Not_declared ->
+            { vars = env.vars; funcs = IdentifierMap.add id definition env.funcs })
+       | Literal lit ->
+         (match id_type id env with
+          | Variable | Not_declared ->
+            { vars = IdentifierMap.add id lit env.vars; funcs = env.funcs }
+          | Function ->
+            { vars = IdentifierMap.add id lit env.vars
+            ; funcs = IdentifierMap.remove id env.funcs
+            })
+       | _ ->
+         failwith "the right-hand expression should've folded to Identifier or Literal")
     | Definition (id, args, body) ->
       if is_builtin_func id
       then failwith ("`" ^ string_of_identifier id ^ "` is a builtin function")
