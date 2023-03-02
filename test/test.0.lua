@@ -7,8 +7,9 @@ function square(a)
     return (a * a)
 end
 
-title_1 = "square area is"
 a = 5
+title_1 = "square area is"
 area = square(a)
 title_2 = "and its perimeter is"
 perimeter = twice(twice(a))
+__show_env()
