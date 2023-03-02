@@ -25,6 +25,7 @@ type statement =
   | Comment
   | Expression of expression
   | Assignment of identifier * expression
+  | Branch of expression * body * body
   | Definition of identifier * args * body
   | Return of expression
 

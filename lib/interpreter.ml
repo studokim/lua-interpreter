@@ -189,6 +189,18 @@ module Executor = struct
        | _ ->
          failwith
            "the right-hand expression should've folded to Literal or function Identifier")
+    | Branch (condition, thenpart, elsepart) ->
+      let test = function
+        | Identifier id -> IdentifierMap.mem id env.funcs
+        | Literal (Bool lit) -> lit
+        | Literal Nil -> false
+        | Literal _ -> true
+        | _ -> failwith "the condition should've folded to Literal or function Identifier"
+      in
+      let condition, env = execute_expression condition env in
+      if test condition
+      then execute_chunk (Chunk thenpart) env
+      else execute_chunk (Chunk elsepart) env
     | Definition (id, args, body) ->
       if is_builtin_func id
       then failwith ("`" ^ string_of_identifier id ^ "` is a builtin function")

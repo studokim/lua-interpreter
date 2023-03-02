@@ -24,7 +24,7 @@ let whitespace =
 let parens p = char '(' *> whitespace *> p <* whitespace <* char ')'
 
 module Identifier = struct
-  let keywords = [ "function"; "end"; "return" ]
+  let keywords = [ "function"; "end"; "return"; "if"; "then"; "else" ]
 
   let name =
     let is_name c = is_alpha c || is_digit c || c = '_' in
@@ -150,8 +150,32 @@ module Statement = struct
 
   let statement =
     fix (fun statement ->
+      let body = sep_by separator (whitespace *> statement <* whitespace) in
+      let branch =
+        let b2_constructor condition thenpart = Branch (condition, thenpart, []) in
+        let b2 =
+          lift2
+            b2_constructor
+            (string "if" *> whitespace *> Expression.expression
+            <* whitespace
+            <* string "then")
+            (whitespace *> body <* whitespace <* string "end")
+        in
+        let b3_constructor condition thenpart elsepart =
+          Branch (condition, thenpart, elsepart)
+        in
+        let b3 =
+          lift3
+            b3_constructor
+            (string "if" *> whitespace *> Expression.expression
+            <* whitespace
+            <* string "then")
+            (whitespace *> body <* whitespace <* string "else")
+            (whitespace *> body <* whitespace <* string "end")
+        in
+        b2 <|> b3
+      in
       let definition =
-        let body = sep_by separator (whitespace *> statement <* whitespace) in
         let definition_constructor id args body = Definition (id, args, body) in
         lift3
           definition_constructor
@@ -163,7 +187,7 @@ module Statement = struct
         string "return" *> whitespace *> (Expression.expression <|> return (Literal Nil))
         >>= fun result -> return (Return result)
       in
-      choice [ comment; definition; return; assignment; expression ])
+      choice [ comment; branch; definition; return; assignment; expression ])
   ;;
 end
 
