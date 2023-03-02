@@ -111,18 +111,27 @@ module Executor = struct
   let is_builtin_func id =
     match string_of_identifier id with
     | "__show_env" -> true
+    | "__import_file" -> true
     | _ -> false
   ;;
 
-  let call_builtin_func id env =
+  let rec call_builtin_func id params env =
     match string_of_identifier id with
     | "__show_env" ->
       show_env env;
       Literal Nil, env
+    | "__import_file" ->
+      (match params with
+       | Literal (String filepath) :: [] ->
+         if Sys.file_exists filepath
+         then (
+           let program = Util.read_file filepath in
+           Literal Nil, execute_chunk (Parser.parse program) env)
+         else failwith ("file `" ^ filepath ^ "` doesn't exist")
+       | _ -> failwith "__import_file(filepath) takes exactly one string argument")
     | _ -> failwith "not a builtin function"
-  ;;
 
-  let rec execute_expression expression env =
+  and execute_expression expression env =
     match expression with
     | Literal lit -> Literal lit, env
     | Identifier id ->
@@ -153,7 +162,7 @@ module Executor = struct
           | _ -> failwith "`op` should've been `and` or `or` here"))
     | Call (id, params) ->
       if is_builtin_func id
-      then call_builtin_func id env
+      then call_builtin_func id params env
       else (
         let args, body = find_func id env in
         let chunk = Chunk (introduce_params args params @ body) in
