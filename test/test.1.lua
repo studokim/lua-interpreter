@@ -1,3 +1,5 @@
+x = 3
+
 function f()
     x=1
     --[[comment-y=(1-2comment--]]
@@ -9,4 +11,7 @@ function f()
 end
 ;
 
+__show_env()
+
+f()
 __show_env()

@@ -7,3 +7,4 @@ end
 
 x = f()
 x()
+__show_env()

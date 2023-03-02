@@ -177,7 +177,7 @@ module Executor = struct
     | Comment -> env
     | Expression expr ->
       (* i.e. call the function that has side-effects *)
-      let _ = execute_expression expr env in
+      let _, env = execute_expression expr env in
       env
     | Assignment (id, expr) ->
       (* var  = func -> remove; add
