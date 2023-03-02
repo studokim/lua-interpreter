@@ -192,7 +192,10 @@ module Executor = struct
     | Definition (id, args, body) ->
       if is_builtin_func id
       then failwith ("`" ^ string_of_identifier id ^ "` is a builtin function")
-      else { vars = env.vars; funcs = IdentifierMap.add id (args, body) env.funcs }
+      else
+        { vars = IdentifierMap.remove id env.vars
+        ; funcs = IdentifierMap.add id (args, body) env.funcs
+        }
     | Return expr ->
       (* Literal or function Identifier *)
       (match execute_expression expr env with
