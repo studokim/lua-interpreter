@@ -149,6 +149,7 @@ module Executor = struct
 
   and execute_statement statement env =
     match statement with
+    | Comment -> env
     | Expression expr ->
       (* i.e. call the function that has side-effects *)
       let _ = execute_expression expr env in

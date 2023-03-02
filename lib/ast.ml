@@ -22,6 +22,7 @@ type expression =
 and params = expression list
 
 type statement =
+  | Comment
   | Expression of expression
   | Assignment of identifier * expression
   | Definition of identifier * args * body

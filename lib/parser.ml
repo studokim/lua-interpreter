@@ -13,27 +13,15 @@ let is_alpha c =
   || (code >= Char.code 'a' && code <= Char.code 'z')
 ;;
 
-let ignored =
-  let whitespace =
-    let is_whitespace = function
-      | ' ' | '\t' | '\r' | '\n' -> true
-      | _ -> false
-    in
-    take_while is_whitespace
+let whitespace =
+  let is_whitespace = function
+    | ' ' | '\t' | '\r' | '\n' -> true
+    | _ -> false
   in
-  let comment =
-    let start = string "--" *> whitespace *> string "[[" in
-    let finish = string "--" *> whitespace *> string "]]" in
-    let content =
-      fix (fun content ->
-        take_till (fun c -> c = '-') <* (finish <|> advance 1 *> content))
-    in
-    start *> content
-  in
-  choice [ comment; whitespace ]
+  take_while is_whitespace
 ;;
 
-let parens p = char '(' *> ignored *> p <* ignored <* char ')'
+let parens p = char '(' *> whitespace *> p <* whitespace <* char ')'
 
 module Identifier = struct
   let keywords = [ "function"; "end"; "return" ]
@@ -116,22 +104,32 @@ module Expression = struct
         let binop_constructor left op right = Binop (left, op, right) in
         lift3
           binop_constructor
-          (ignored *> expression <* ignored)
+          (whitespace *> expression <* whitespace)
           operator
-          (ignored *> expression <* ignored)
+          (whitespace *> expression <* whitespace)
       in
       let call =
         let call_constructor id params = Call (id, params) in
         lift2
           call_constructor
-          (Identifier.name <* ignored)
-          (parens (sep_by (char ',') (ignored *> expression <* ignored)))
+          (Identifier.name <* whitespace)
+          (parens (sep_by (char ',') (whitespace *> expression <* whitespace)))
       in
       choice [ call; identifier; literal; parens binop ])
   ;;
 end
 
 module Statement = struct
+  let comment =
+    let start = string "--[[" in
+    let finish = string "--]]" in
+    let content =
+      fix (fun content ->
+        take_till (fun c -> c = '-') <* (finish <|> advance 1 *> content))
+    in
+    start *> content >>= fun _ -> return Comment
+  ;;
+
   let expression = Expression.expression >>= fun result -> return (Expression result)
 
   let assignment =
@@ -144,40 +142,38 @@ module Statement = struct
     let assignment_constructor id expr = Assignment (id, expr) in
     lift2
       assignment_constructor
-      (Identifier.name <* ignored <* operator)
-      (ignored *> Expression.expression)
+      (Identifier.name <* whitespace <* operator)
+      (whitespace *> Expression.expression)
   ;;
+
+  let separator = string ";" <|> whitespace
 
   let statement =
     fix (fun statement ->
-      let body =
-        let separator = string ";" <|> ignored in
-        sep_by separator (ignored *> statement <* ignored)
-      in
       let definition =
+        let body = sep_by separator (whitespace *> statement <* whitespace) in
         let definition_constructor id args body = Definition (id, args, body) in
         lift3
           definition_constructor
-          (string "function" *> ignored *> Identifier.name <* ignored)
-          (parens (sep_by (char ',') (ignored *> Identifier.name <* ignored)))
-          (ignored *> body <* ignored <* string "end")
+          (string "function" *> whitespace *> Identifier.name <* whitespace)
+          (parens (sep_by (char ',') (whitespace *> Identifier.name <* whitespace)))
+          (whitespace *> body <* whitespace <* string "end")
       in
       let return =
-        string "return" *> ignored *> (Expression.expression <|> return (Literal Nil))
+        string "return" *> whitespace *> (Expression.expression <|> return (Literal Nil))
         >>= fun result -> return (Return result)
       in
-      choice [ definition; return; assignment; expression ])
+      choice [ comment; definition; return; assignment; expression ])
   ;;
 end
 
 module Chunk = struct
   let chunk =
     let statement_list =
-      let separator = ignored *> string ";" <* ignored <|> ignored in
-      sep_by separator Statement.statement >>= fun result -> return (Chunk result)
+      sep_by Statement.separator (whitespace *> Statement.statement <* whitespace)
+      >>= fun result -> return (Chunk result)
     in
-    let empty_list = ignored >>= fun _ -> return (Chunk []) in
-    ignored *> (statement_list <|> empty_list) <* ignored
+    statement_list
   ;;
 end
 
