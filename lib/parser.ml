@@ -115,7 +115,7 @@ module Expression = struct
           (Identifier.name <* whitespace)
           (parens (sep_by (char ',') (whitespace *> expression <* whitespace)))
       in
-      choice [ call; identifier; literal; parens binop ])
+      choice [ call; literal; identifier; parens binop ])
   ;;
 end
 
