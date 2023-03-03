@@ -124,22 +124,24 @@ end = struct
   ;;
 
   let rec print args env =
+    let print_one expr env =
+      match expr with
+      | Literal Nil -> print_string "nil"
+      | Literal (Bool lit) -> print_string (string_of_bool lit)
+      | Literal (Numeric lit) -> print_float lit
+      | Literal (String lit) -> print_string lit
+      | Identifier func ->
+        let args, _ = find_func func env in
+        print_string (string_of_func func args)
+      | _ -> crash ": the expr should've folded to Literal or function Identifier"
+    in
     match args with
     | [] ->
       print_newline ();
       Literal Nil, env
     | head :: tail ->
-      let _ =
-        match Expression.execute head env with
-        | Literal Nil, _ -> print_string "nil"
-        | Literal (Bool lit), _ -> print_string (string_of_bool lit)
-        | Literal (Numeric lit), _ -> print_float lit
-        | Literal (String lit), _ -> print_string lit
-        | Identifier func, _ ->
-          let args, _ = find_func func env in
-          print_string (string_of_func func args)
-        | _ -> crash ": the expr should've folded to Literal or function Identifier"
-      in
+      let head, env = Expression.execute head env in
+      print_one head env;
       if tail != [] then print_char ' ';
       print tail env
   ;;
