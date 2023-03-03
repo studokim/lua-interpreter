@@ -31,6 +31,13 @@ module Environment = struct
     | Name name -> name
   ;;
 
+  let string_of_func id args =
+    string_of_identifier id
+    ^ " ("
+    ^ String.concat ", " (List.map string_of_identifier args)
+    ^ ")"
+  ;;
+
   type id_type =
     | Variable
     | Function
@@ -94,14 +101,10 @@ end = struct
 
   let show_func id (args, chunk) =
     let args, _ = args, chunk in
-    print_string
-      (string_of_identifier id
-      ^ " ("
-      ^ String.concat ", " (List.map string_of_identifier args)
-      ^ ")\n")
+    print_endline (string_of_func id args)
   ;;
 
-  let show_env _ env =
+  let show_env env =
     print_string "-----\n";
     IdentifierMap.iter show_var env.vars;
     IdentifierMap.iter show_func env.funcs;
@@ -120,17 +123,40 @@ end = struct
     | _ -> fail ": __import_file(filepath) takes exactly one string argument"
   ;;
 
+  let rec print args env =
+    match args with
+    | [] ->
+      print_newline ();
+      Literal Nil, env
+    | head :: tail ->
+      let _ =
+        match Expression.execute head env with
+        | Literal Nil, _ -> print_string "nil"
+        | Literal (Bool lit), _ -> print_string (string_of_bool lit)
+        | Literal (Numeric lit), _ -> print_float lit
+        | Literal (String lit), _ -> print_string lit
+        | Identifier func, _ ->
+          let args, _ = find_func func env in
+          print_string (string_of_func func args)
+        | _ -> crash ": the expr should've folded to Literal or function Identifier"
+      in
+      if tail != [] then print_char ' ';
+      print tail env
+  ;;
+
   let is_builtin id =
     match string_of_identifier id with
     | "__show_env" -> true
     | "__import_file" -> true
+    | "print" -> true
     | _ -> false
   ;;
 
   let call_builtin id params env =
     match string_of_identifier id with
-    | "__show_env" -> show_env params env
+    | "__show_env" -> show_env env
     | "__import_file" -> import_file params env
+    | "print" -> print params env
     | _ -> crash (": `" ^ string_of_identifier id ^ "` is not a builtin function")
   ;;
 end
