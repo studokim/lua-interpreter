@@ -144,11 +144,18 @@ end = struct
       print tail env
   ;;
 
+  let notf params env =
+    match params with
+    | expr :: [] -> Literal (Bool (not (Expression.bool_of_expression expr env))), env
+    | _ -> fail ": not(expr) takes exactly one argument"
+  ;;
+
   let is_builtin id =
     match string_of_identifier id with
     | "__show_env" -> true
     | "__import_file" -> true
     | "print" -> true
+    | "not" -> true
     | _ -> false
   ;;
 
@@ -157,6 +164,7 @@ end = struct
     | "__show_env" -> show_env env
     | "__import_file" -> import_file params env
     | "print" -> print params env
+    | "not" -> notf params env
     | _ -> crash (": `" ^ string_of_identifier id ^ "` is not a builtin function")
   ;;
 end
@@ -195,16 +203,16 @@ end = struct
 end
 
 and Expression : sig
-  val test : expression -> Environment.env -> bool
+  val bool_of_expression : expression -> Environment.env -> bool
   val execute : expression -> Environment.env -> expression * Environment.env
 end = struct
   open Environment
 
-  let test condition env =
-    match condition with
+  let bool_of_expression expr env =
+    match expr with
     | Identifier id -> IdentifierMap.mem id env.funcs
-    | Literal (Bool lit) -> lit
     | Literal Nil -> false
+    | Literal (Bool lit) -> lit
     | Literal _ -> true
     | _ -> crash ": the condition should've folded to Literal or function Identifier"
   ;;
@@ -223,8 +231,8 @@ end = struct
        | _ -> fail ": only operations on numbers are allowed")
     | EqualsOp -> Literal (Bool (left = right))
     | AndOp | OrOp ->
-      let left = test left env in
-      let right = test right env in
+      let left = bool_of_expression left env in
+      let right = bool_of_expression right env in
       (match op with
        | AndOp -> Literal (Bool (left && right))
        | OrOp -> Literal (Bool (left || right))
@@ -291,7 +299,7 @@ end = struct
     | Assignment (id, expr) -> assign id expr env
     | Branch (condition, thenpart, elsepart) ->
       let condition, env = Expression.execute condition env in
-      let condition = Expression.test condition env in
+      let condition = Expression.bool_of_expression condition env in
       if condition then Chunk.execute thenpart env else Chunk.execute elsepart env
     | Definition (id, args, body) ->
       if Builtins.is_builtin id
