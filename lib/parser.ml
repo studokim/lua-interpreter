@@ -24,7 +24,20 @@ let whitespace =
 let parens p = char '(' *> whitespace *> p <* whitespace <* char ')'
 
 module Identifier = struct
-  let keywords = [ "function"; "end"; "return"; "if"; "then"; "else"; "and"; "or" ]
+  let keywords =
+    [ "function"
+    ; "return"
+    ; "if"
+    ; "then"
+    ; "else"
+    ; "end"
+    ; "and"
+    ; "or"
+    ; "true"
+    ; "false"
+    ; "nil"
+    ]
+  ;;
 
   let name =
     let is_name c = is_alpha c || is_digit c || c = '_' in
@@ -115,7 +128,7 @@ module Expression = struct
           (Identifier.name <* whitespace)
           (parens (sep_by (char ',') (whitespace *> expression <* whitespace)))
       in
-      choice [ call; literal; identifier; parens binop ])
+      choice [ call; identifier; literal; parens binop ])
   ;;
 end
 
