@@ -112,7 +112,7 @@ end = struct
     Literal Nil, env
   ;;
 
-  let import_file params env =
+  let dofile params env =
     match params with
     | Literal (String filepath) :: [] ->
       if Sys.file_exists filepath
@@ -120,7 +120,7 @@ end = struct
         let program = Util.read_file filepath in
         Literal Nil, Chunk.execute (Parser.parse program) env)
       else fail (": file `" ^ filepath ^ "` doesn't exist")
-    | _ -> fail ": __import_file(filepath) takes exactly one string argument"
+    | _ -> fail ": dofile(filepath) takes exactly one string argument"
   ;;
 
   let rec print args env =
@@ -153,7 +153,7 @@ end = struct
   let is_builtin id =
     match string_of_identifier id with
     | "__show_env" -> true
-    | "__import_file" -> true
+    | "dofile" -> true
     | "print" -> true
     | "not" -> true
     | _ -> false
@@ -162,7 +162,7 @@ end = struct
   let call_builtin id params env =
     match string_of_identifier id with
     | "__show_env" -> show_env env
-    | "__import_file" -> import_file params env
+    | "dofile" -> dofile params env
     | "print" -> print params env
     | "not" -> notf params env
     | _ -> crash (": `" ^ string_of_identifier id ^ "` is not a builtin function")
