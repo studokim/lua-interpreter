@@ -2,10 +2,10 @@
 type identifier = Name of string
 
 type literal =
+  | Nil
+  | Bool of bool
   | Numeric of float
   | String of string
-  | Bool of bool
-  | Nil
 
 type operator =
   | AddOp
@@ -28,11 +28,9 @@ type statement =
   | Comment
   | Expression of expression
   | Assignment of identifier * expression
-  | Branch of expression * body * body
-  | Definition of identifier * args * body
+  | Branch of expression * chunk * chunk
+  | Definition of identifier * args * chunk
   | Return of expression
 
 and args = identifier list
-and body = statement list
-
-type chunk = Chunk of statement list
+and chunk = Chunk of statement list

@@ -1,6 +1,3 @@
-open Interpreter
-open Environment
-
 let read_input () =
   let rec next_line acc =
     match read_line () with
@@ -13,17 +10,24 @@ let read_input () =
   String.concat " " (next_line [])
 ;;
 
-let execute input env = Executor.execute_chunk (Parser.parse input) env
-let env = { vars = IdentifierMap.empty; funcs = IdentifierMap.empty }
+let execute input env = Interpreter.Chunk.execute (Parser.parse input) env
+
+let env =
+  let open Interpreter.Environment in
+  { vars = IdentifierMap.empty; funcs = IdentifierMap.empty }
+;;
 
 let rec iterate env =
   try
     let input = read_input () in
-    let env_updated = execute input env in
-    iterate env_updated
+    let env = execute input env in
+    iterate env
   with
   | End_of_file -> exit 0
-  | Failure m ->
-    print_endline m;
+  | Parser.Error m ->
+    print_endline ("parser error" ^ m);
+    iterate env
+  | Interpreter.Error m ->
+    print_endline ("interpreter error" ^ m);
     iterate env
 ;;

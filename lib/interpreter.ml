@@ -1,5 +1,11 @@
 open Ast
 
+exception Error of string
+exception Implementation_error of string
+
+let fail msg = raise (Error msg)
+let crash msg = raise (Implementation_error msg)
+
 (*** Environment ***)
 
 module Environment = struct
@@ -18,7 +24,7 @@ module Environment = struct
 
   type env =
     { vars : literal IdentifierMap.t
-    ; funcs : (args * body) IdentifierMap.t
+    ; funcs : (args * chunk) IdentifierMap.t
     }
 
   let string_of_identifier = function
@@ -33,7 +39,7 @@ module Environment = struct
     let is_var = IdentifierMap.mem id env.vars in
     let is_func = IdentifierMap.mem id env.funcs in
     if is_var && is_func
-    then failwith ("ambigous identifier `" ^ string_of_identifier id ^ "`")
+    then fail (": ambigous identifier `" ^ string_of_identifier id ^ "`")
     else if is_func
     then Function
     else Variable
@@ -60,8 +66,22 @@ module Environment = struct
 
   let find_func id env =
     try IdentifierMap.find id env.funcs with
-    | Not_found -> failwith ("function `" ^ string_of_identifier id ^ "` not declared")
+    | Not_found -> fail (": function `" ^ string_of_identifier id ^ "` not declared")
   ;;
+end
+
+(*** Executor ***)
+
+module rec Builtins : sig
+  val is_builtin : Ast.identifier -> bool
+
+  val call_builtin
+    :  Ast.identifier
+    -> Ast.expression list
+    -> Environment.env
+    -> Ast.expression * Environment.env
+end = struct
+  open Environment
 
   let show_var id value =
     let name = string_of_identifier id in
@@ -72,66 +92,120 @@ module Environment = struct
     | Nil -> print_string (name ^ " = nil\n")
   ;;
 
-  let show_func id = function
-    | args, _ ->
-      print_string
-        (string_of_identifier id
-        ^ " ("
-        ^ String.concat ", " (List.map string_of_identifier args)
-        ^ ")\n")
+  let show_func id (args, chunk) =
+    let args, _ = args, chunk in
+    print_string
+      (string_of_identifier id
+      ^ " ("
+      ^ String.concat ", " (List.map string_of_identifier args)
+      ^ ")\n")
   ;;
 
-  let show_env env =
+  let show_env _ env =
     print_string "-----\n";
     IdentifierMap.iter show_var env.vars;
     IdentifierMap.iter show_func env.funcs;
-    print_string "-----\n"
-  ;;
-end
-
-(*** Executor ***)
-
-module Executor = struct
-  open Environment
-
-  let introduce_params (args : args) (params : params) : statement list =
-    let introduce_one (arg : identifier) (param : expression) : statement =
-      Assignment (arg, param)
-    in
-    try List.map2 introduce_one args params with
-    | Invalid_argument _ ->
-      failwith
-        ("expected "
-        ^ string_of_int (List.length args)
-        ^ " parameters, "
-        ^ string_of_int (List.length params)
-        ^ " given")
+    print_string "-----\n";
+    Literal Nil, env
   ;;
 
-  let is_builtin_func id =
+  let import_file params env =
+    match params with
+    | Literal (String filepath) :: [] ->
+      if Sys.file_exists filepath
+      then (
+        let program = Util.read_file filepath in
+        Literal Nil, Chunk.execute (Parser.parse program) env)
+      else fail (": file `" ^ filepath ^ "` doesn't exist")
+    | _ -> fail ": __import_file(filepath) takes exactly one string argument"
+  ;;
+
+  let is_builtin id =
     match string_of_identifier id with
     | "__show_env" -> true
     | "__import_file" -> true
     | _ -> false
   ;;
 
-  let rec call_builtin_func id params env =
+  let call_builtin id params env =
     match string_of_identifier id with
-    | "__show_env" ->
-      show_env env;
-      Literal Nil, env
-    | "__import_file" ->
-      (match params with
-       | Literal (String filepath) :: [] ->
-         if Sys.file_exists filepath
-         then (
-           let program = Util.read_file filepath in
-           Literal Nil, execute_chunk (Parser.parse program) env)
-         else failwith ("file `" ^ filepath ^ "` doesn't exist")
-       | _ -> failwith "__import_file(filepath) takes exactly one string argument")
-    | _ -> failwith "not a builtin function"
+    | "__show_env" -> show_env params env
+    | "__import_file" -> import_file params env
+    | _ -> crash (": `" ^ string_of_identifier id ^ "` is not a builtin function")
+  ;;
+end
 
-  and execute_expression expression env =
+and Function : sig
+  val call : identifier -> params -> Environment.env -> expression * Environment.env
+end = struct
+  open Environment
+
+  let introduce_params args params =
+    let introduce_one arg param = Assignment (arg, param) in
+    try List.map2 introduce_one args params with
+    | Invalid_argument _ ->
+      fail
+        (": expected "
+        ^ string_of_int (List.length args)
+        ^ " parameters, "
+        ^ string_of_int (List.length params)
+        ^ " given")
+  ;;
+
+  let call id params env =
+    if Builtins.is_builtin id
+    then Builtins.call_builtin id params env
+    else (
+      let args, Chunk body = find_func id env in
+      let chunk = Chunk (introduce_params args params @ body) in
+      (* Function call can modify env if it declares new variables or functions.
+         Since we don't implement Lua's `local` keyword, all these are global *)
+      let env = Chunk.execute chunk env in
+      (* TODO: fix hidden dependence by data *)
+      match id_type returned env with
+      | Variable -> Literal (find_var returned env), env
+      | Function -> Identifier returned, env)
+  ;;
+end
+
+and Expression : sig
+  val test : expression -> Environment.env -> bool
+  val execute : expression -> Environment.env -> expression * Environment.env
+end = struct
+  open Environment
+
+  let test condition env =
+    match condition with
+    | Identifier id -> IdentifierMap.mem id env.funcs
+    | Literal (Bool lit) -> lit
+    | Literal Nil -> false
+    | Literal _ -> true
+    | _ -> crash ": the condition should've folded to Literal or function Identifier"
+  ;;
+
+  let binop left op right env =
+    match op with
+    | AddOp | SubOp | MulOp | DivOp ->
+      (match left, right with
+       | Literal (Numeric left), Literal (Numeric right) ->
+         (match op with
+          | AddOp -> Literal (Numeric (left +. right))
+          | SubOp -> Literal (Numeric (left -. right))
+          | MulOp -> Literal (Numeric (left *. right))
+          | DivOp -> Literal (Numeric (left /. right))
+          | _ -> crash ": `op` should've been arithmetic here")
+       | _ -> fail ": only operations on numbers are allowed")
+    | EqualsOp -> Literal (Bool (left = right))
+    | AndOp | OrOp ->
+      let left = test left env in
+      let right = test right env in
+      (match op with
+       | AndOp -> Literal (Bool (left && right))
+       | OrOp -> Literal (Bool (left || right))
+       | _ -> crash ": `op` should've been `and` or `or` here")
+  ;;
+
+  let rec execute expression env =
     match expression with
     | Literal lit -> Literal lit, env
     | Identifier id ->
@@ -139,110 +213,87 @@ module Executor = struct
        | Variable -> Literal (find_var id env), env
        | Function -> Identifier id, env)
     | Binop (left, op, right) ->
-      let left, env = execute_expression left env in
-      let right, env = execute_expression right env in
-      (match op with
-       | AddOp | SubOp | MulOp | DivOp ->
-         (match left, right with
-          | Literal (Numeric left), Literal (Numeric right) ->
-            (match op with
-             | AddOp -> Literal (Numeric (left +. right)), env
-             | SubOp -> Literal (Numeric (left -. right)), env
-             | MulOp -> Literal (Numeric (left *. right)), env
-             | DivOp -> Literal (Numeric (left /. right)), env
-             | _ -> failwith "`op` should've been arithmetic here")
-          | _ -> failwith "only operations on numbers are allowed")
-       | EqualsOp -> Literal (Bool (left = right)), env
-       | AndOp | OrOp ->
-         let left, env = test left env in
-         let right, env = test right env in
-         (match op with
-          | AndOp -> Literal (Bool (left && right)), env
-          | OrOp -> Literal (Bool (left || right)), env
-          | _ -> failwith "`op` should've been `and` or `or` here"))
-    | Call (id, params) ->
-      if is_builtin_func id
-      then call_builtin_func id params env
-      else (
-        let args, body = find_func id env in
-        let chunk = Chunk (introduce_params args params @ body) in
-        (* function call can modify env if it declares new variables or functions *)
-        let env = execute_chunk chunk env in
-        match id_type returned env with
-        | Variable -> Literal (find_var returned env), env
-        | Function -> Identifier returned, env)
+      let left, env = execute left env in
+      let right, env = execute right env in
+      binop left op right env, env
+    | Call (id, params) -> Function.call id params env
+  ;;
+end
 
-  and test condition env =
-    let condition, env = execute_expression condition env in
-    match condition with
-    | Identifier id -> IdentifierMap.mem id env.funcs, env
-    | Literal (Bool lit) -> lit, env
-    | Literal Nil -> false, env
-    | Literal _ -> true, env
-    | _ -> failwith "the condition should've folded to Literal or function Identifier"
+and Statement : sig
+  val execute : Ast.statement -> Environment.env -> Environment.env
+end = struct
+  open Environment
 
-  and execute_statement statement env =
+  let assign id expr env =
+    (* var  = func -> remove; add
+       func = func -> none;   add
+       var  = var  -> add;    none
+       func = var  -> add;    remove
+       *)
+    match Expression.execute expr env with
+    | Literal lit, env ->
+      (match id_type id env with
+       | Variable -> { vars = IdentifierMap.add id lit env.vars; funcs = env.funcs }
+       | Function ->
+         { vars = IdentifierMap.add id lit env.vars
+         ; funcs = IdentifierMap.remove id env.funcs
+         })
+    (* TODO: fix hidden dependence
+       Expression.execute guarantees that if expr is Identifier, it is a Function *)
+    | Identifier func, env ->
+      let definition = find_func func env in
+      (match id_type id env with
+       | Variable ->
+         { vars = IdentifierMap.remove id env.vars
+         ; funcs = IdentifierMap.add id definition env.funcs
+         }
+       | Function ->
+         { vars = env.vars; funcs = IdentifierMap.add id definition env.funcs })
+    | _ ->
+      crash
+        ": the right-hand expression should've folded to Literal or function Identifier"
+  ;;
+
+  let execute statement env =
     match statement with
     | Comment -> env
     | Expression expr ->
       (* i.e. call the function that has side-effects *)
-      let _, env = execute_expression expr env in
+      let _, env = Expression.execute expr env in
       env
-    | Assignment (id, expr) ->
-      (* var  = func -> remove; add
-         func = func -> none;   add
-         var  = var  -> add;    none
-         func = var  -> add;    remove
-         *)
-      (match execute_expression expr env with
-       | Literal lit, env ->
-         (match id_type id env with
-          | Variable -> { vars = IdentifierMap.add id lit env.vars; funcs = env.funcs }
-          | Function ->
-            { vars = IdentifierMap.add id lit env.vars
-            ; funcs = IdentifierMap.remove id env.funcs
-            })
-       (* execute_expression guarantees that if expr is Identifier, it is a Function *)
-       | Identifier func, env ->
-         let definition = find_func func env in
-         (match id_type id env with
-          | Variable ->
-            { vars = IdentifierMap.remove id env.vars
-            ; funcs = IdentifierMap.add id definition env.funcs
-            }
-          | Function ->
-            { vars = env.vars; funcs = IdentifierMap.add id definition env.funcs })
-       | _ ->
-         failwith
-           "the right-hand expression should've folded to Literal or function Identifier")
+    | Assignment (id, expr) -> assign id expr env
     | Branch (condition, thenpart, elsepart) ->
-      let condition, env = test condition env in
-      if condition
-      then execute_chunk (Chunk thenpart) env
-      else execute_chunk (Chunk elsepart) env
+      let condition, env = Expression.execute condition env in
+      let condition = Expression.test condition env in
+      if condition then Chunk.execute thenpart env else Chunk.execute elsepart env
     | Definition (id, args, body) ->
-      if is_builtin_func id
-      then failwith ("`" ^ string_of_identifier id ^ "` is a builtin function")
+      if Builtins.is_builtin id
+      then fail (": `" ^ string_of_identifier id ^ "` is a builtin function")
       else
         { vars = IdentifierMap.remove id env.vars
         ; funcs = IdentifierMap.add id (args, body) env.funcs
         }
     | Return expr ->
-      (* Literal or function Identifier *)
-      (match execute_expression expr env with
+      (match Expression.execute expr env with
        | Literal lit, env -> return_var lit env
        | Identifier func, env -> return_func (find_func func env) env
        | _ ->
-         failwith
-           "the return expression should've folded to Literal or function Identifier")
+         crash
+           ": the return expression should've folded to Literal or function Identifier")
+  ;;
+end
 
-  and execute_chunk chunk env : env =
+and Chunk : sig
+  val execute : Ast.chunk -> Environment.env -> Environment.env
+end = struct
+  let rec execute chunk env =
     match chunk with
     | Chunk [] -> env
     | Chunk (head :: tail) ->
       (match head with
-       | Return _ -> execute_statement head env
-       | _ -> execute_statement head env |> execute_chunk (Chunk tail))
+       | Return _ -> Statement.execute head env
+       | _ -> Statement.execute head env |> execute (Chunk tail))
   ;;
 end
 

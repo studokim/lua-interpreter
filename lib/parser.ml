@@ -44,6 +44,9 @@ module Identifier = struct
 end
 
 module Literal = struct
+  let nil = string "nil" *> return Nil
+  let bool = string "true" *> return (Bool true) <|> string "false" *> return (Bool false)
+
   (* there could be exponents https://www.lua.org/pil/2.3.html *)
   let numeric =
     let sign =
@@ -73,13 +76,7 @@ module Literal = struct
     char '"' *> take_till is_quote <* char '"' >>= fun s -> return (String s)
   ;;
 
-  let bool =
-    Angstrom.string "true" *> return (Bool true)
-    <|> Angstrom.string "false" *> return (Bool false)
-  ;;
-
-  let nil = Angstrom.string "nil" *> return Nil
-  let literal = choice [ numeric; string; bool; nil ]
+  let literal = choice [ nil; bool; numeric; string ]
 end
 
 (*** Combined Parsing ***)
@@ -127,10 +124,10 @@ module Statement = struct
     let start = string "--[[" in
     let finish = string "--]]" in
     let content =
-      fix (fun content ->
-        take_till (fun c -> c = '-') <* (finish <|> advance 1 *> content))
+      let is_dash c = c = '-' in
+      fix (fun content -> take_till is_dash <* (finish <|> advance 1 *> content))
     in
-    start *> content >>= fun _ -> return Comment
+    start *> content *> return Comment
   ;;
 
   let expression = Expression.expression >>= fun result -> return (Expression result)
@@ -148,16 +145,19 @@ module Statement = struct
 
   let statement =
     fix (fun statement ->
-      let body = sep_by separator (whitespace *> statement <* whitespace) in
+      let chunk =
+        sep_by separator (whitespace *> statement <* whitespace)
+        >>= fun result -> return (Chunk result)
+      in
       let branch =
-        let b2_constructor condition thenpart = Branch (condition, thenpart, []) in
+        let b2_constructor condition thenpart = Branch (condition, thenpart, Chunk []) in
         let b2 =
           lift2
             b2_constructor
             (string "if" *> whitespace *> Expression.expression
             <* whitespace
             <* string "then")
-            (whitespace *> body <* whitespace <* string "end")
+            (whitespace *> chunk <* whitespace <* string "end")
         in
         let b3_constructor condition thenpart elsepart =
           Branch (condition, thenpart, elsepart)
@@ -168,8 +168,8 @@ module Statement = struct
             (string "if" *> whitespace *> Expression.expression
             <* whitespace
             <* string "then")
-            (whitespace *> body <* whitespace <* string "else")
-            (whitespace *> body <* whitespace <* string "end")
+            (whitespace *> chunk <* whitespace <* string "else")
+            (whitespace *> chunk <* whitespace <* string "end")
         in
         b2 <|> b3
       in
@@ -179,33 +179,30 @@ module Statement = struct
           definition_constructor
           (string "function" *> whitespace *> Identifier.name <* whitespace)
           (parens (sep_by (char ',') (whitespace *> Identifier.name <* whitespace)))
-          (whitespace *> body <* whitespace <* string "end")
+          (whitespace *> chunk <* whitespace <* string "end")
       in
       let return =
         string "return" *> whitespace *> (Expression.expression <|> return (Literal Nil))
         >>= fun result -> return (Return result)
       in
-      choice [ comment; branch; definition; return; assignment; expression ])
+      choice [ comment; assignment; branch; definition; return; expression ])
   ;;
 end
 
 module Chunk = struct
   let chunk =
-    let statement_list =
-      sep_by Statement.separator (whitespace *> Statement.statement <* whitespace)
-      >>= fun result -> return (Chunk result)
-    in
-    statement_list
+    sep_by Statement.separator (whitespace *> Statement.statement <* whitespace)
+    >>= fun result -> return (Chunk result)
   ;;
 end
 
 (*** Helpers ***)
 
+exception Error of string
+
 let unpack = function
   | Result.Ok ast_node -> ast_node
-  | Result.Error e -> failwith ("parsing error" ^ e)
+  | Result.Error e -> raise (Error e)
 ;;
 
-let parse_all parser string = parse_string ~consume:All parser string
-let parse_prefix parser string = parse_string ~consume:Prefix parser string
-let parse string = unpack (parse_all Chunk.chunk string)
+let parse string = unpack (parse_string ~consume:All Chunk.chunk string)
