@@ -294,9 +294,9 @@ end = struct
     | Comment -> env
     | Expression expr ->
       (* i.e. call the function that has side-effects *)
-      let _, env = Expression.execute expr env in
-      env
-    | Assignment (id, expr) -> assign id expr env
+      if Builtins.is_builtin id
+      then fail (": `" ^ string_of_identifier id ^ "` is a builtin function")
+      else Literal Nil, assign id expr env
     | Branch (condition, thenpart, elsepart) ->
       let condition, env = Expression.execute condition env in
       let condition = Expression.bool_of_expression condition env in
