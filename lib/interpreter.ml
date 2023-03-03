@@ -6,8 +6,6 @@ exception Implementation_error of string
 let fail msg = raise (Error msg)
 let crash msg = raise (Implementation_error msg)
 
-(*** Environment ***)
-
 module Environment = struct
   module Identifier = struct
     type t = identifier
@@ -52,20 +50,6 @@ module Environment = struct
     else Variable
   ;;
 
-  let returned = Name "#returned"
-
-  let return_var lit env =
-    { vars = IdentifierMap.add returned lit env.vars
-    ; funcs = IdentifierMap.remove returned env.funcs
-    }
-  ;;
-
-  let return_func (args, body) env =
-    { vars = IdentifierMap.remove returned env.vars
-    ; funcs = IdentifierMap.add returned (args, body) env.funcs
-    }
-  ;;
-
   let find_var id env =
     try IdentifierMap.find id env.vars with
     | Not_found -> Nil
@@ -76,8 +60,6 @@ module Environment = struct
     | Not_found -> fail (": function `" ^ string_of_identifier id ^ "` not declared")
   ;;
 end
-
-(*** Executor ***)
 
 module rec Builtins : sig
   val is_builtin : Ast.identifier -> bool
@@ -118,7 +100,7 @@ end = struct
       if Sys.file_exists filepath
       then (
         let program = Util.read_file filepath in
-        Literal Nil, Chunk.execute (Parser.parse program) env)
+        Chunk.execute (Parser.parse program) env)
       else fail (": file `" ^ filepath ^ "` doesn't exist")
     | _ -> fail ": dofile(filepath) takes exactly one string argument"
   ;;
@@ -194,13 +176,9 @@ end = struct
     else (
       let args, Chunk body = find_func id env in
       let chunk = Chunk (introduce_params args params @ body) in
-      (* Function call can modify env if it declares new variables or functions.
+      (* Function call can modify env if it modifies or declares new vars or funcs.
          Since we don't implement Lua's `local` keyword, all these are global *)
-      let env = Chunk.execute chunk env in
-      (* TODO: fix hidden dependence by data *)
-      match id_type returned env with
-      | Variable -> Literal (find_var returned env), env
-      | Function -> Identifier returned, env)
+      Chunk.execute chunk env)
   ;;
 end
 
@@ -257,7 +235,7 @@ end = struct
 end
 
 and Statement : sig
-  val execute : Ast.statement -> Environment.env -> Environment.env
+  val execute : Ast.statement -> Environment.env -> expression * Environment.env
 end = struct
   open Environment
 
@@ -291,11 +269,16 @@ end = struct
         ": the right-hand expression should've folded to Literal or function Identifier"
   ;;
 
+  (* TODO: fix hidden dependence
+     all but Return produce Literal Nil *)
   let execute statement env =
     match statement with
-    | Comment -> env
+    | Comment -> Literal Nil, env
     | Expression expr ->
       (* i.e. call the function that has side-effects *)
+      let _, env = Expression.execute expr env in
+      Literal Nil, env
+    | Assignment (id, expr) ->
       if Builtins.is_builtin id
       then fail (": `" ^ string_of_identifier id ^ "` is a builtin function")
       else Literal Nil, assign id expr env
@@ -306,30 +289,31 @@ end = struct
     | Definition (id, args, body) ->
       if Builtins.is_builtin id
       then fail (": `" ^ string_of_identifier id ^ "` is a builtin function")
-      else
-        { vars = IdentifierMap.remove id env.vars
-        ; funcs = IdentifierMap.add id (args, body) env.funcs
-        }
-    | Return expr ->
-      (match Expression.execute expr env with
-       | Literal lit, env -> return_var lit env
-       | Identifier func, env -> return_func (find_func func env) env
-       | _ ->
-         crash
-           ": the return expression should've folded to Literal or function Identifier")
+      else (
+        let env =
+          { vars = IdentifierMap.remove id env.vars
+          ; funcs = IdentifierMap.add id (args, body) env.funcs
+          }
+        in
+        Literal Nil, env)
+    | Return expr -> Expression.execute expr env
   ;;
 end
 
 and Chunk : sig
-  val execute : Ast.chunk -> Environment.env -> Environment.env
+  val execute : Ast.chunk -> Environment.env -> expression * Environment.env
 end = struct
   let rec execute chunk env =
     match chunk with
-    | Chunk [] -> env
+    | Chunk [] -> Literal Nil, env
     | Chunk (head :: tail) ->
-      (match head with
-       | Return _ -> Statement.execute head env
-       | _ -> Statement.execute head env |> execute (Chunk tail))
+      let result, env = Statement.execute head env in
+      if result != Literal Nil
+      then result, env
+      else (
+        match head with
+        | Return _ -> result, env
+        | _ -> execute (Chunk tail) env)
   ;;
 end
 

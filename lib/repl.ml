@@ -10,7 +10,10 @@ let read_input () =
   String.concat " " (next_line [])
 ;;
 
-let execute input env = Interpreter.Chunk.execute (Parser.parse input) env
+let execute input env =
+  let _, env = Interpreter.Chunk.execute (Parser.parse input) env in
+  env
+;;
 
 let env =
   let open Interpreter.Environment in
