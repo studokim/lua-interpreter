@@ -2,7 +2,7 @@
 
 (** SPDX-License-Identifier: LGPL-3.0-or-later *)
 
-open Lua
+open Lua_lib
 
 let interpret_file filepath =
   if Sys.file_exists filepath

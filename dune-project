@@ -1,26 +1,28 @@
-(lang dune 3.6)
+(lang dune 2.8)
 
-(name lua)
+(generate_opam_files true)
 
-(generate_opam_files false)
+(cram enable)
 
-(source
- (github username/reponame))
+(license LGPL-3.0-or-later)
 
-(authors "Author Name")
+(authors "Muravev Kirill")
 
-(maintainers "Maintainer Name")
+(maintainers "Muravev Kirill")
 
-(license LICENSE)
+(bug_reports "-")
 
-(documentation https://url/to/documentation)
+(homepage "-")
 
 (package
- (name lua)
- (synopsis "A short synopsis")
- (description "A longer description")
- (depends ocaml dune angstrom)
- (tags
-  (topics "to describe" your project)))
-
-; See the complete stanza docs at https://dune.readthedocs.io/en/stable/dune-files.html#dune-project
+ (name Lua)
+ (synopsis "An interpreter for Lua")
+ (description
+  "An interpreter for Lua language that at least should be able to execute a program that computes the factorial.")
+ (version 0.1)
+ (depends
+  dune
+  angstrom
+  (ocamlformat :build)
+  ; After adding dependencies to 'dune' files add the same dependecies here too
+  ))
