@@ -250,7 +250,7 @@ end = struct
          { vars = IdentifierMap.add id lit env.vars
          ; funcs = IdentifierMap.remove id env.funcs
          })
-    (* TODO: fix hidden dependence
+    (* TODO: fix implicit dependence
        Expression.execute guarantees that if expr is Identifier, it is a Function *)
     | Identifier func, env ->
       let definition = find_func func env in
@@ -266,7 +266,7 @@ end = struct
         ": the right-hand expression should've folded to Literal or function Identifier"
   ;;
 
-  (* TODO: fix hidden dependence
+  (* TODO: fix implicit dependence
      all but Return produce Literal Nil *)
   let execute statement env =
     match statement with
