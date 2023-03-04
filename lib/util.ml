@@ -8,3 +8,5 @@ let read_file filepath =
   close_in channel;
   program
 ;;
+
+let concat = String.concat ""

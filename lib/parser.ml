@@ -83,7 +83,7 @@ module Literal = struct
     | Some '.' ->
       advance 1 *> take_while1 is_digit
       >>= fun fraction ->
-      return (Numeric (float_of_string (sign ^ integer ^ "." ^ fraction)))
+      return (Numeric (float_of_string (Util.concat [ sign; integer; "."; fraction ])))
     | _ -> return (Numeric (float_of_string (sign ^ integer)))
   ;;
 

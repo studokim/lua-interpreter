@@ -34,10 +34,8 @@ module Environment = struct
   ;;
 
   let string_of_func id args =
-    string_of_identifier id
-    ^ " ("
-    ^ String.concat ", " (List.map string_of_identifier args)
-    ^ ")"
+    let args = String.concat ", " (List.map string_of_identifier args) in
+    Util.concat [ string_of_identifier id; " ("; args; ")" ]
   ;;
 
   type id_type =
@@ -48,7 +46,7 @@ module Environment = struct
     let is_var = IdentifierMap.mem id env.vars in
     let is_func = IdentifierMap.mem id env.funcs in
     if is_var && is_func
-    then crash (": ambigous identifier `" ^ string_of_identifier id ^ "`")
+    then crash (Util.concat [ ": ambigous identifier `"; string_of_identifier id; "`" ])
     else if is_func
     then Function
     else Variable
@@ -61,7 +59,8 @@ module Environment = struct
 
   let find_func id env =
     try IdentifierMap.find id env.funcs with
-    | Not_found -> fail (": function `" ^ string_of_identifier id ^ "` not declared")
+    | Not_found ->
+      fail (Util.concat [ ": function `"; string_of_identifier id; "` not declared" ])
   ;;
 end
 
@@ -79,9 +78,9 @@ end = struct
   let show_var id value =
     let name = string_of_identifier id in
     match value with
-    | Numeric num -> print_string (name ^ " = " ^ string_of_float num ^ "\n")
-    | String str -> print_string (name ^ " = \"" ^ str ^ "\"\n")
-    | Bool b -> print_string (name ^ " = " ^ string_of_bool b ^ "\n")
+    | Numeric num -> print_string (Util.concat [ name; " = "; string_of_float num; "\n" ])
+    | String str -> print_string (Util.concat [ name; " = \""; str; "\"\n" ])
+    | Bool b -> print_string (Util.concat [ name; " = "; string_of_bool b; "\n" ])
     | Nil -> print_string (name ^ " = nil\n")
   ;;
 
@@ -105,7 +104,7 @@ end = struct
       then (
         let program = Util.read_file filepath in
         Chunk.execute (Parser.parse program) env)
-      else fail (": file `" ^ filepath ^ "` doesn't exist")
+      else fail (Util.concat [ ": file `"; filepath; "` doesn't exist" ])
     | _ -> fail ": dofile(filepath) takes exactly one string argument"
   ;;
 
@@ -150,7 +149,9 @@ end = struct
     | "dofile" -> dofile params env
     | "print" -> print params env
     | "not" -> notf params env
-    | _ -> crash (": `" ^ string_of_identifier id ^ "` is not a builtin function")
+    | _ ->
+      crash
+        (Util.concat [ ": `"; string_of_identifier id; "` is not a builtin function" ])
   ;;
 end
 
@@ -164,11 +165,13 @@ end = struct
     try List.map2 introduce_one args params with
     | Invalid_argument _ ->
       fail
-        (": expected "
-        ^ string_of_int (List.length args)
-        ^ " parameters, "
-        ^ string_of_int (List.length params)
-        ^ " given")
+        (Util.concat
+           [ ": expected "
+           ; string_of_int (List.length args)
+           ; " parameters, "
+           ; string_of_int (List.length params)
+           ; " given"
+           ])
   ;;
 
   let call id params env =
@@ -249,7 +252,7 @@ end = struct
     match Expression.execute expr env with
     | Literal lit, env ->
       (match id_type id env with
-       | Variable -> { vars = IdentifierMap.add id lit env.vars; funcs = env.funcs }
+       | Variable -> { env with vars = IdentifierMap.add id lit env.vars }
        | Function ->
          { vars = IdentifierMap.add id lit env.vars
          ; funcs = IdentifierMap.remove id env.funcs
@@ -263,8 +266,7 @@ end = struct
          { vars = IdentifierMap.remove id env.vars
          ; funcs = IdentifierMap.add id definition env.funcs
          }
-       | Function ->
-         { vars = env.vars; funcs = IdentifierMap.add id definition env.funcs })
+       | Function -> { env with funcs = IdentifierMap.add id definition env.funcs })
     | _ ->
       crash
         ": the right-hand expression should've folded to Literal or function Identifier"
@@ -281,7 +283,8 @@ end = struct
       Literal Nil, env
     | Assignment (id, expr) ->
       if Builtins.is_builtin id
-      then fail (": `" ^ string_of_identifier id ^ "` is a builtin function")
+      then
+        fail (Util.concat [ ": `"; string_of_identifier id; "` is a builtin function" ])
       else Literal Nil, assign id expr env
     | Branch (condition, thenpart, elsepart) ->
       let condition, env = Expression.execute condition env in
@@ -289,7 +292,8 @@ end = struct
       if condition then Chunk.execute thenpart env else Chunk.execute elsepart env
     | Definition (id, args, body) ->
       if Builtins.is_builtin id
-      then fail (": `" ^ string_of_identifier id ^ "` is a builtin function")
+      then
+        fail (Util.concat [ ": `"; string_of_identifier id; "` is a builtin function" ])
       else (
         let env =
           { vars = IdentifierMap.remove id env.vars
