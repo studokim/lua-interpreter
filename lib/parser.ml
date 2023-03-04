@@ -154,7 +154,7 @@ module Statement = struct
       (whitespace *> Expression.expression)
   ;;
 
-  let separator = string ";" <|> whitespace
+  let separator = char ';' <|> char ' '
 
   let statement =
     fix (fun statement ->
