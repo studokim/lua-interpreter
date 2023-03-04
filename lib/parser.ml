@@ -5,7 +5,15 @@
 open Angstrom
 open Ast
 
-(*** Individual Parsing ***)
+(** The error to be thrown when parsing fails (wrong input). *)
+exception Error of string
+
+(** Unpacks [Result.Ok|Error]. *)
+let unpack = function
+  | Result.Ok ast_node -> ast_node
+  | Result.Error e -> raise (Error e)
+;;
+
 let is_digit c =
   let code = Char.code c in
   code >= Char.code '0' && code <= Char.code '9'
@@ -17,6 +25,7 @@ let is_alpha c =
   || (code >= Char.code 'a' && code <= Char.code 'z')
 ;;
 
+(** Consumes 0..inf whitespaces. *)
 let whitespace =
   let is_whitespace = function
     | ' ' | '\t' | '\r' | '\n' -> true
@@ -25,9 +34,12 @@ let whitespace =
   take_while is_whitespace
 ;;
 
+(** Returns any parser enclosed to  parentheses. *)
 let parens p = char '(' *> whitespace *> p <* whitespace <* char ')'
 
+(** Functions needed to parse [Identifier]. *)
 module Identifier = struct
+  (** Registered Lua keywords, may not be used as identifiers. *)
   let keywords =
     [ "function"
     ; "return"
@@ -43,6 +55,7 @@ module Identifier = struct
     ]
   ;;
 
+  (** Parses [Name] ast node. *)
   let name =
     let is_name c = is_alpha c || is_digit c || c = '_' in
     let first =
@@ -60,12 +73,17 @@ module Identifier = struct
   ;;
 end
 
+(** Functions needed to parse [Literal]. *)
 module Literal = struct
+  (** Parses [Nil] ast node. *)
   let nil = string "nil" *> return Nil
+
+  (** Parses [Bool] ast node. *)
   let bool = string "true" *> return (Bool true) <|> string "false" *> return (Bool false)
 
-  (* there could be exponents https://www.lua.org/pil/2.3.html *)
+  (** Parses [Numeric] ast node. *)
   let numeric =
+    (* TODO: there could be exponents https://www.lua.org/pil/2.3.html *)
     let sign =
       peek_char
       >>= function
@@ -87,19 +105,23 @@ module Literal = struct
     | _ -> return (Numeric (float_of_string (sign ^ integer)))
   ;;
 
-  (* there could be escaped quotes *)
+  (** Parses [String] ast node. *)
   let string =
+    (* TODO: there could be escaped quotes *)
     let is_quote c = c = '"' in
     char '"' *> take_till is_quote <* char '"' >>= fun s -> return (String s)
   ;;
 
+  (** [Parser.Literal] entry point. Parses any literal. *)
   let literal = choice [ nil; bool; numeric; string ]
 end
 
-(*** Combined Parsing ***)
-
+(** Functions needed to parse [Expression]. *)
 module Expression = struct
+  (** Parses [Identifier] ast node. *)
   let identifier = Identifier.name >>= fun result -> return (Identifier result)
+
+  (** Parses [Literal] ast node. *)
   let literal = Literal.literal >>= fun result -> return (Literal result)
 
   let operator =
@@ -115,6 +137,7 @@ module Expression = struct
       ]
   ;;
 
+  (** [Parser.Expression] entry point. Parses [Binop], [Call] and other expressions. *)
   let expression =
     fix (fun expression ->
       let binop =
@@ -136,7 +159,9 @@ module Expression = struct
   ;;
 end
 
+(** Functions needed to parse [Statement]. *)
 module Statement = struct
+  (** Parses [Comment] ast node. *)
   let comment =
     let start = string "--[[" in
     let finish = string "--]]" in
@@ -147,8 +172,10 @@ module Statement = struct
     start *> content *> return Comment
   ;;
 
+  (** Parses [Expression] ast node. *)
   let expression = Expression.expression >>= fun result -> return (Expression result)
 
+  (** Parses [Assignment] ast node. *)
   let assignment =
     let operator = string "=" <|> fail "assignment operator expected" in
     let assignment_constructor id expr = Assignment (id, expr) in
@@ -160,6 +187,7 @@ module Statement = struct
 
   let separator = char ';' <|> char ' '
 
+  (** [Parser.Statement] entry point. Parses [Branch], [Definition], [Return] and other statements. *)
   let statement =
     fix (fun statement ->
       let chunk =
@@ -206,20 +234,18 @@ module Statement = struct
   ;;
 end
 
+(** Functions needed to parse [Chunk]. *)
 module Chunk = struct
+  (** Parses [Chunk] ast node. *)
   let chunk =
     sep_by Statement.separator (whitespace *> Statement.statement <* whitespace)
     >>= fun result -> return (Chunk result)
   ;;
 end
 
-(*** Helpers ***)
-
-exception Error of string
-
-let unpack = function
-  | Result.Ok ast_node -> ast_node
-  | Result.Error e -> raise (Error e)
-;;
-
+(** Parser entry point. *)
 let parse string = unpack (parse_string ~consume:All Chunk.chunk string)
+
+(* --------------------------- *)
+(* ---------- TESTS ---------- *)
+(* --------------------------- *)

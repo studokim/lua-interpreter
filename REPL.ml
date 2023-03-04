@@ -4,6 +4,8 @@
 
 open Lua_lib
 
+(** Reads file contents and executes them as Repl does;
+    fails if the file doesn't exist. *)
 let interpret_file filepath =
   if Sys.file_exists filepath
   then (
@@ -13,7 +15,9 @@ let interpret_file filepath =
   else failwith "file doesn't exist"
 ;;
 
-let () =
+(** Entry point.
+    Parses args, then runs repl-mode or single-file-mode.*)
+let main =
   if Array.length Sys.argv = 2
   then (
     let filepath = Sys.argv.(1) in
@@ -22,3 +26,5 @@ let () =
     print_endline "Hello from Lua!";
     Repl.iterate Repl.env)
 ;;
+
+let () = main

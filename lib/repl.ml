@@ -2,6 +2,7 @@
 
 (** SPDX-License-Identifier: LGPL-3.0-or-later *)
 
+(** Prompts to input many lines. Returns when an empty line is given. *)
 let read_input () =
   let rec next_line acc =
     match read_line () with
@@ -14,16 +15,20 @@ let read_input () =
   String.concat " " (next_line [])
 ;;
 
+(** Wraps [Parser] and [Interpeter] together. *)
 let execute input env =
   let _, env = Interpreter.Chunk.execute (Parser.parse input) env in
   env
 ;;
 
+(** Default empty [env]. *)
 let env =
   let open Interpreter.Environment in
   { vars = IdentifierMap.empty; funcs = IdentifierMap.empty }
 ;;
 
+(** Recursively iterates: prompt -> execute -> prompt.
+    Handles [Parser.Error] and [Interpreter.Error], i.e. wrong user input. *)
 let rec iterate env =
   try
     let input = read_input () in

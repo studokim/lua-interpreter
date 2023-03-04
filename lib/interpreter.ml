@@ -4,12 +4,19 @@
 
 open Ast
 
+(** The error to be thrown when execution fails (wrong input). *)
 exception Error of string
+
+(** The error to be thrown when [Interpreter] behaves not as expected. *)
 exception Implementation_error of string
 
+(** Throw [Error]. *)
 let fail msg = raise (Error msg)
+
+(** Throw [Implementation.Error]. *)
 let crash msg = raise (Implementation_error msg)
 
+(** Data structures and functions used to preserve program state. *)
 module Environment = struct
   module Identifier = struct
     type t = identifier
@@ -42,6 +49,7 @@ module Environment = struct
     | Variable
     | Function
 
+  (** Check if [id] is [Variable] or [Function]. *)
   let id_type id env =
     let is_var = IdentifierMap.mem id env.vars in
     let is_func = IdentifierMap.mem id env.funcs in
@@ -52,11 +60,13 @@ module Environment = struct
     else Variable
   ;;
 
+  (** Find [id] among variables. *)
   let find_var id env =
     try IdentifierMap.find id env.vars with
     | Not_found -> Nil
   ;;
 
+  (** Find [id] among functions. *)
   let find_func id env =
     try IdentifierMap.find id env.funcs with
     | Not_found ->
@@ -64,9 +74,12 @@ module Environment = struct
   ;;
 end
 
+(** Built-in functions implementations, such as [print()]. *)
 module rec Builtins : sig
+  (** Check if there's a built-in function with this [id]. *)
   val is_builtin : Ast.identifier -> bool
 
+  (** Execute a built-in function with this [id]. *)
   val call_builtin
     :  Ast.identifier
     -> Ast.expression list
@@ -89,6 +102,7 @@ end = struct
     print_endline (string_of_func id args)
   ;;
 
+  (** Print all variables, then all functions. *)
   let show_env env =
     print_string "-----\n";
     IdentifierMap.iter show_var env.vars;
@@ -97,6 +111,7 @@ end = struct
     Literal Nil, env
   ;;
 
+  (** Read file contents and execute as a chunk. *)
   let dofile params env =
     match params with
     | Literal (String filepath) :: [] ->
@@ -108,6 +123,7 @@ end = struct
     | _ -> fail ": dofile(filepath) takes exactly one string argument"
   ;;
 
+  (** Print string representations of any number of args. *)
   let rec print args env =
     let print_one expr env =
       match expr with
@@ -131,6 +147,7 @@ end = struct
       print tail env
   ;;
 
+  (** Lua's [not] operator implemented as a function. *)
   let notf params env =
     match params with
     | expr :: [] -> Literal (Bool (not (Expression.bool_of_expression expr env))), env
@@ -155,11 +172,14 @@ end = struct
   ;;
 end
 
+(** Interpret function definitions and calls. *)
 and Function : sig
+  (** Execute [Call] statement. *)
   val call : identifier -> params -> Environment.env -> expression * Environment.env
 end = struct
   open Environment
 
+  (** Assign values to function args. *)
   let introduce_params args params =
     let introduce_one arg param = Assignment (arg, param) in
     try List.map2 introduce_one args params with
@@ -186,8 +206,11 @@ end = struct
   ;;
 end
 
+(** Interpret [Expression]. *)
 and Expression : sig
   val bool_of_expression : expression -> Environment.env -> bool
+
+  (** Execute any [Expression]. *)
   val execute : expression -> Environment.env -> expression * Environment.env
 end = struct
   open Environment
@@ -201,6 +224,7 @@ end = struct
     | _ -> crash ": the condition should've folded to Literal or function Identifier"
   ;;
 
+  (** Execute [Binop] expression. *)
   let binop left op right env =
     match op with
     | AddOp | SubOp | MulOp | DivOp ->
@@ -238,11 +262,14 @@ end = struct
   ;;
 end
 
+(** Interpret [Statement]. *)
 and Statement : sig
+  (** Execute [Statement]. *)
   val execute : Ast.statement -> Environment.env -> expression * Environment.env
 end = struct
   open Environment
 
+  (** Execute [Assignment]. *)
   let assign id expr env =
     (* var  = func -> remove; add
        func = func -> none;   add
@@ -305,7 +332,9 @@ end = struct
   ;;
 end
 
+(** Interpret [Chunk]. *)
 and Chunk : sig
+  (** Execute [Chunk]. *)
   val execute : Ast.chunk -> Environment.env -> expression * Environment.env
 end = struct
   let rec execute chunk env =
@@ -322,7 +351,9 @@ end = struct
   ;;
 end
 
-(*** Tests ***)
+(* --------------------------- *)
+(* ---------- TESTS ---------- *)
+(* --------------------------- *)
 
 let ast =
   let var = Name "var" in

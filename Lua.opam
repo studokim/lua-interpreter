@@ -12,8 +12,8 @@ bug-reports: "-"
 depends: [
   "dune" {>= "2.8"}
   "angstrom"
-  "ocamlformat" {build}
   "odoc" {with-doc}
+  "ocamlformat" {build}
 ]
 build: [
   ["dune" "subst"] {dev}
