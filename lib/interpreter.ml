@@ -44,7 +44,7 @@ module Environment = struct
     let is_var = IdentifierMap.mem id env.vars in
     let is_func = IdentifierMap.mem id env.funcs in
     if is_var && is_func
-    then fail (": ambigous identifier `" ^ string_of_identifier id ^ "`")
+    then crash (": ambigous identifier `" ^ string_of_identifier id ^ "`")
     else if is_func
     then Function
     else Variable
@@ -136,10 +136,7 @@ end = struct
 
   let is_builtin id =
     match string_of_identifier id with
-    | "__show_env" -> true
-    | "dofile" -> true
-    | "print" -> true
-    | "not" -> true
+    | "__show_env" | "dofile" | "print" | "not" -> true
     | _ -> false
   ;;
 
