@@ -1,2 +1,2 @@
 Topdirs.dir_use Format.err_formatter (Filename.concat (Sys.getenv "HOME") ".ocamlinit")
-open Lua
+open Lua_lib
