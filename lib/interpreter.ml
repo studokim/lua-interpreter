@@ -150,7 +150,9 @@ end = struct
   (** Lua's [not] operator implemented as a function. *)
   let notf params env =
     match params with
-    | expr :: [] -> Literal (Bool (not (Expression.bool_of_expression expr env))), env
+    | expr :: [] ->
+      let expr, env = Expression.execute expr env in
+      Literal (Bool (not (Expression.bool_of_expression expr env))), env
     | _ -> fail ": not(expr) takes exactly one argument"
   ;;
 
