@@ -5,6 +5,5 @@ function f()
     return g
 end
 
-x = f()
-x()
+f()
 __show_env()

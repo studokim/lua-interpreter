@@ -13,4 +13,6 @@
  (libraries Lua.Lib))
 
 (cram
- (deps ./REPL.exe %{bin:REPL}))
+ (deps
+  ./REPL.exe
+  (glob_files test/**.lua)))

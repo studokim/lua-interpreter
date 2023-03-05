@@ -1,17 +1,12 @@
-x = 3
-
 function f()
-    x=1
+    x = 1
     --[[comment-y=(1-2comment--]]
     --[[comment
     --[[comment
-
+    y = 2
     comment--]]
-    z=3
+    z = 3
 end
-;
-
-__show_env()
 
 f()
 __show_env()
