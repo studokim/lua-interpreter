@@ -55,7 +55,7 @@ module Identifier = struct
     ]
   ;;
 
-  (** Parses [Name] ast node. *)
+  (** [Parser.Identifier] entry point. Parses [Name] ast node. *)
   let name =
     let is_name c = is_alpha c || is_digit c || c = '_' in
     let first =
@@ -236,7 +236,7 @@ end
 
 (** Functions needed to parse [Chunk]. *)
 module Chunk = struct
-  (** Parses [Chunk] ast node. *)
+  (** [Parser.Chunk] entry point. Parses [Chunk] ast node. *)
   let chunk =
     sep_by Statement.separator (whitespace *> Statement.statement <* whitespace)
     >>= fun result -> return (Chunk result)
@@ -245,7 +245,3 @@ end
 
 (** Parser entry point. *)
 let parse string = unpack (parse_string ~consume:All Chunk.chunk string)
-
-(* --------------------------- *)
-(* ---------- TESTS ---------- *)
-(* --------------------------- *)
