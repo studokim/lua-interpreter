@@ -21,12 +21,6 @@ let execute input env =
   env
 ;;
 
-(** Default empty [env]. *)
-let env =
-  let open Interpreter.Environment in
-  { vars = IdentifierMap.empty; funcs = IdentifierMap.empty }
-;;
-
 (** Recursively iterates: prompt -> execute -> prompt.
     Handles [Parser.Error] and [Interpreter.Error], i.e. wrong user input. *)
 let rec iterate env =

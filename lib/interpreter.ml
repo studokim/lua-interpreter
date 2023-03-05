@@ -36,6 +36,9 @@ module Environment = struct
     ; funcs : (args * chunk) IdentifierMap.t
     }
 
+  (** Default empty [env]. *)
+  let empty = { vars = IdentifierMap.empty; funcs = IdentifierMap.empty }
+
   let string_of_identifier = function
     | Name name -> name
   ;;
@@ -303,6 +306,7 @@ end = struct
 
   (* TODO: fix implicit dependence
      all but Return produce Literal Nil *)
+  (** Execute any [Statement]. *)
   let execute statement env =
     match statement with
     | Comment -> Literal Nil, env

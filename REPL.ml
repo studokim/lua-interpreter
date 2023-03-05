@@ -10,7 +10,7 @@ let interpret_file filepath =
   if Sys.file_exists filepath
   then (
     let program = Util.read_file filepath in
-    let _ = Repl.execute program Repl.env in
+    let _ = Repl.execute program Interpreter.Environment.empty in
     ())
   else failwith "file doesn't exist"
 ;;
@@ -24,7 +24,7 @@ let main =
     interpret_file filepath)
   else (
     print_endline "Hello from Lua!";
-    Repl.iterate Repl.env)
+    Repl.iterate Interpreter.Environment.empty)
 ;;
 
 let () = main
