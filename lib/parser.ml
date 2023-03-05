@@ -185,7 +185,7 @@ module Statement = struct
       (whitespace *> Expression.expression)
   ;;
 
-  let separator = char ';' <|> char ' '
+  let separator = string ";" <|> whitespace
 
   (** [Parser.Statement] entry point. Parses [Branch], [Definition], [Return] and other statements. *)
   let statement =
